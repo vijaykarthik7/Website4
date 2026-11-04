@@ -566,6 +566,7 @@ body:not(.loading-state) .preloader-overlay {
   overflow: hidden;
   opacity: 1;
   transition: opacity 0.4s ease;
+  background: #050507 url('fall/ezgif-frame-001.webp') center center / cover no-repeat;
 }
 
 #fall-canvas {
@@ -593,7 +594,7 @@ body:not(.loading-state) .preloader-overlay {
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.4s ease;
-  background: radial-gradient(ellipse 80% 60% at 50% 30%, rgba(212, 175, 55, 0.08) 0%, rgba(10, 10, 12, 0.98) 70%, #050507 100%);
+  background: #050507 url('lift/ezgif-frame-001.webp') center center / cover no-repeat;
 }
 
 #lift-canvas {
@@ -627,7 +628,7 @@ body:not(.loading-state) .preloader-overlay {
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.4s ease;
-  background: radial-gradient(ellipse 80% 60% at 50% 35%, rgba(212, 175, 55, 0.08) 0%, rgba(10, 10, 12, 0.98) 70%, #050507 100%);
+  background: #050507 url('build/ezgif-frame-001.webp') center center / cover no-repeat;
 }
 
 #build-canvas {
@@ -670,7 +671,7 @@ body:not(.loading-state) .preloader-overlay {
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.4s ease;
-  background: radial-gradient(ellipse 80% 60% at 50% 40%, rgba(212, 175, 55, 0.08) 0%, rgba(10, 10, 12, 0.98) 70%, #050507 100%);
+  background: #050507 url('hand/ezgif-frame-001.webp') center center / cover no-repeat;
 }
 
 #hand-canvas {
@@ -712,7 +713,7 @@ body:not(.loading-state) .preloader-overlay {
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.4s ease;
-  background: radial-gradient(ellipse 80% 60% at 50% 35%, rgba(212, 175, 55, 0.08) 0%, rgba(10, 10, 12, 0.98) 70%, #050507 100%);
+  background: #050507 url('radio/ezgif-frame-001.webp') center center / cover no-repeat;
 }
 
 #radio-canvas {

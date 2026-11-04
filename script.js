@@ -226,7 +226,80 @@
   }
 
   // ==========================================================================
+  // 4A. HIGH-PERFORMANCE GLOBAL SEQUENCE CONTROLLER & PRIORITY QUEUE
+  // ==========================================================================
+  class GlobalSequenceLoader {
+    constructor(maxConcurrent = 2) {
+      this.maxConcurrent = maxConcurrent;
+      this.activeCount = 0;
+      this.queue = [];
+      this.cache = new Map();
+      this.pending = new Map();
+    }
+
+    getImage(url) {
+      return this.cache.get(url) || null;
+    }
+
+    isLoaded(url) {
+      const img = this.cache.get(url);
+      return !!(img && img.complete && img.naturalWidth > 0);
+    }
+
+    load(url, priority = 0) {
+      if (this.isLoaded(url)) {
+        return Promise.resolve(this.cache.get(url));
+      }
+      if (this.pending.has(url)) {
+        const item = this.queue.find(q => q.url === url);
+        if (item && priority > item.priority) {
+          item.priority = priority;
+          this.sortQueue();
+        }
+        return this.pending.get(url);
+      }
+
+      const p = new Promise((resolve) => {
+        this.queue.push({ url, priority, resolve });
+        this.sortQueue();
+        this.pump();
+      });
+
+      this.pending.set(url, p);
+      return p;
+    }
+
+    sortQueue() {
+      this.queue.sort((a, b) => b.priority - a.priority);
+    }
+
+    pump() {
+      while (this.activeCount < this.maxConcurrent && this.queue.length > 0) {
+        const item = this.queue.shift();
+        this.activeCount++;
+        const img = new Image();
+        img.onload = () => {
+          this.cache.set(item.url, img);
+          this.activeCount--;
+          item.resolve(img);
+          this.pump();
+        };
+        img.onerror = () => {
+          this.activeCount--;
+          item.resolve(null);
+          this.pump();
+        };
+        img.src = item.url;
+      }
+    }
+  }
+
+  const globalSequenceLoader = new GlobalSequenceLoader(2);
+  window.globalSequenceLoader = globalSequenceLoader;
+
+  // ==========================================================================
   // 4B. FALL SCROLL-DOWN CANVAS SCRUBBER (191 FRAMES ACROSS SECTIONS 1 TO 3)
+  // (01 - HERO, 02 - AWARDS, 03 - ABOUT)
   // ==========================================================================
   const fallCanvas = document.getElementById('fall-canvas');
   const fallViewport = document.getElementById('fall-bg-viewport');
@@ -237,13 +310,9 @@
   if (fallCanvas && fallViewport && heroSection && aboutSection) {
     const fallCtx = fallCanvas.getContext('2d', { alpha: false });
     const TOTAL_FRAMES = 191;
-    const fallFrames = new Array(TOTAL_FRAMES);
-    const fallLoaded = new Array(TOTAL_FRAMES).fill(false);
-    const fallLoadingPromises = new Map();
     let targetFrameFloat = 0;
     let currentFrameFloat = 0;
     let isFallVisible = true;
-    let initialFrameRendered = false;
 
     // Elements for Hero scroll exit parallax
     const heroCenterContent = document.getElementById('hero-text-content');
@@ -251,7 +320,6 @@
     const heroTrustBar = document.querySelector('.hero-bottom-trust-bar');
     const heroScrollCue = document.getElementById('hero-scroll-cue');
 
-    // Click handler for Hero scroll cue (scroll smoothly to Awards)
     if (heroScrollCue) {
       heroScrollCue.addEventListener('click', (e) => {
         e.preventDefault();
@@ -276,8 +344,8 @@
       return `fall/ezgif-frame-${padded}.webp`;
     }
 
-    let cW = 0;
-    let cH = 0;
+    let cW = (fallCanvas.width = window.innerWidth);
+    let cH = (fallCanvas.height = window.innerHeight);
     function resizeFallCanvas() {
       cW = fallCanvas.width = window.innerWidth;
       cH = fallCanvas.height = window.innerHeight;
@@ -299,31 +367,37 @@
 
     function renderFallFrame() {
       const desiredIdx = Math.max(0, Math.min(TOTAL_FRAMES - 1, Math.round(currentFrameFloat)));
+      const desiredUrl = getFramePath(desiredIdx);
 
-      // Eagerly trigger on-demand load if not yet in memory
-      if (!fallLoaded[desiredIdx]) {
-        loadFrame(desiredIdx);
+      // High priority load for active scroll index
+      if (!globalSequenceLoader.isLoaded(desiredUrl)) {
+        globalSequenceLoader.load(desiredUrl, 1000).then(() => {
+          if (isFallVisible) renderFallFrame();
+        });
       }
-      for (let s = 1; s <= 3; s++) {
-        if (desiredIdx + s < TOTAL_FRAMES && !fallLoaded[desiredIdx + s]) loadFrame(desiredIdx + s);
-        if (desiredIdx - s >= 0 && !fallLoaded[desiredIdx - s]) loadFrame(desiredIdx - s);
+      // Prefetch immediate neighbors
+      if (desiredIdx + 1 < TOTAL_FRAMES) {
+        const nextUrl = getFramePath(desiredIdx + 1);
+        if (!globalSequenceLoader.isLoaded(nextUrl)) globalSequenceLoader.load(nextUrl, 500);
+      }
+      if (desiredIdx - 1 >= 0) {
+        const prevUrl = getFramePath(desiredIdx - 1);
+        if (!globalSequenceLoader.isLoaded(prevUrl)) globalSequenceLoader.load(prevUrl, 500);
       }
 
-      let frameToDraw = null;
-      if (fallLoaded[desiredIdx] && fallFrames[desiredIdx]) {
-        frameToDraw = fallFrames[desiredIdx];
-      } else {
-        // Nearest-neighbor fallback search
+      let frameToDraw = globalSequenceLoader.getImage(desiredUrl);
+      if (!frameToDraw) {
+        // Nearest neighbor fallback
         for (let d = 1; d < TOTAL_FRAMES; d++) {
-          const prev = desiredIdx - d;
-          const next = desiredIdx + d;
-          if (prev >= 0 && fallLoaded[prev] && fallFrames[prev]) {
-            frameToDraw = fallFrames[prev];
-            break;
+          const prevIdx = desiredIdx - d;
+          const nextIdx = desiredIdx + d;
+          if (prevIdx >= 0) {
+            const pImg = globalSequenceLoader.getImage(getFramePath(prevIdx));
+            if (pImg) { frameToDraw = pImg; break; }
           }
-          if (next < TOTAL_FRAMES && fallLoaded[next] && fallFrames[next]) {
-            frameToDraw = fallFrames[next];
-            break;
+          if (nextIdx < TOTAL_FRAMES) {
+            const nImg = globalSequenceLoader.getImage(getFramePath(nextIdx));
+            if (nImg) { frameToDraw = nImg; break; }
           }
         }
       }
@@ -333,68 +407,9 @@
       }
     }
 
-    function loadFrame(idx) {
-      if (idx < 0 || idx >= TOTAL_FRAMES) return Promise.resolve(null);
-      if (fallFrames[idx]) return Promise.resolve(fallFrames[idx]);
-      if (fallLoadingPromises.has(idx)) return fallLoadingPromises.get(idx);
-
-      const p = new Promise((resolve) => {
-        const img = new Image();
-        img.src = getFramePath(idx);
-        img.onload = () => {
-          fallFrames[idx] = img;
-          fallLoaded[idx] = true;
-          fallLoadingPromises.delete(idx);
-          if (!initialFrameRendered) {
-            initialFrameRendered = true;
-            resizeFallCanvas();
-            renderFallFrame();
-          } else if (isFallVisible) {
-            renderFallFrame();
-          }
-          resolve(img);
-        };
-        img.onerror = () => {
-          fallLoadingPromises.delete(idx);
-          resolve(null);
-        };
-      });
-
-      fallLoadingPromises.set(idx, p);
-      return p;
-    }
-
-    async function preloadFallSequence() {
-      // 1. Immediately load Frame 0 and paint instantly
-      await loadFrame(0);
-      if (!initialFrameRendered) {
-        initialFrameRendered = true;
-        resizeFallCanvas();
-        renderFallFrame();
-      }
-
-      // 2. Preload keyframes across entire sequence so scrubbing is always immediate
-      const keyframes = [];
-      for (let i = 2; i < TOTAL_FRAMES; i += 4) {
-        keyframes.push(i);
-      }
-      if (!keyframes.includes(TOTAL_FRAMES - 1)) {
-        keyframes.push(TOTAL_FRAMES - 1);
-      }
-
-      for (let i = 0; i < keyframes.length; i += 6) {
-        const chunk = keyframes.slice(i, i + 6);
-        chunk.forEach(loadFrame);
-        await new Promise((r) => setTimeout(r, 35));
-      }
-    }
-
     function updateHeroParallax(scrollY, heroHeight) {
       if (scrollY > heroHeight * 1.3) return;
-
       const ratio = Math.min(1, Math.max(0, scrollY / Math.max(1, heroHeight * 0.85)));
-
-      // Center hero headline & CTAs: upward translation and elegant fade
       if (heroCenterContent) {
         const ty = -10 - scrollY * 0.35;
         const scale = 1 - ratio * 0.05;
@@ -402,18 +417,12 @@
         heroCenterContent.style.transform = `translate3d(0, ${ty}px, 0) scale(${scale})`;
         heroCenterContent.style.opacity = op;
       }
-
-      // Spatial Pins: float outwards and fade
       if (heroSpatialPins) {
         heroSpatialPins.style.opacity = Math.max(0, 1 - ratio * 1.4);
       }
-
-      // Trust bar: soft fade
       if (heroTrustBar) {
         heroTrustBar.style.opacity = Math.max(0, 1 - ratio * 2.0);
       }
-
-      // Bottom scroll cue: fade out as soon as scroll starts
       if (heroScrollCue) {
         heroScrollCue.style.opacity = Math.max(0, 1 - ratio * 3.5);
       }
@@ -426,12 +435,6 @@
       const aboutBottom = aRect.bottom + scrollY;
       const winH = window.innerHeight;
 
-      // Range for Sections 1, 2, and 3:
-      // Section 1: Hero (top: 0)
-      // Section 2: Awards (top: ~804)
-      // Section 3: About / Trust (top: ~1750, bottom: aboutBottom ~2903)
-      // Fall animation stays active and visible across ALL 3 sections!
-      // It smoothly fades out at the bottom of Section 3 as Section 4 (Services) enters.
       const fadeStart = Math.max(1, aboutBottom - winH * 0.7);
       const fadeEnd = aboutBottom;
 
@@ -450,20 +453,15 @@
         isFallVisible = false;
       }
 
-      // Scroll Down Animation across all 3 sections (Hero, Awards, About):
-      // At scrollY === 0: stationary at Frame 0 (NO video autoplay whatsoever).
-      // As user scrolls down across Sections 1, 2, 3: scrubs frames 0 to 190 in direct sync with scroll.
       const scrubRange = Math.max(1, fadeStart);
       const progress = Math.min(1, Math.max(0, scrollY / scrubRange));
       targetFrameFloat = progress * (TOTAL_FRAMES - 1);
 
-      // Update Hero exit parallax
       updateHeroParallax(scrollY, heroHeight);
     }
 
     function fallAnimLoop() {
       if (isFallVisible) {
-        // ONLY updates when user scroll position changes targetFrameFloat. Completely static when resting.
         const diff = targetFrameFloat - currentFrameFloat;
         if (Math.abs(diff) > 0.005) {
           currentFrameFloat += diff * 0.25;
@@ -480,8 +478,25 @@
 
     resizeFallCanvas();
     updateFallProgress();
-    preloadFallSequence();
     requestAnimationFrame(fallAnimLoop);
+
+    // Load Frame 0 immediately
+    globalSequenceLoader.load(getFramePath(0), 2000).then((img) => {
+      if (img) renderFallFrame();
+    });
+
+    // Start background keyframe loading AFTER page load completes so the tab spinner stops instantly!
+    const queueFallKeyframes = () => {
+      for (let i = 3; i < TOTAL_FRAMES; i += 3) {
+        globalSequenceLoader.load(getFramePath(i), 15);
+      }
+    };
+    if (document.readyState === 'complete') {
+      setTimeout(queueFallKeyframes, 100);
+    } else {
+      window.addEventListener('load', queueFallKeyframes);
+      setTimeout(queueFallKeyframes, 2000);
+    }
   }
 
   // ==========================================================================
@@ -497,14 +512,10 @@
   if (liftCanvas && liftViewport && servicesSection && portfolioSection) {
     const liftCtx = liftCanvas.getContext('2d', { alpha: false });
     const TOTAL_LIFT_FRAMES = 192;
-    const liftFrames = new Array(TOTAL_LIFT_FRAMES);
-    const liftLoaded = new Array(TOTAL_LIFT_FRAMES).fill(false);
-    const liftLoadingPromises = new Map();
     let liftTargetFrameFloat = 0;
     let liftCurrentFrameFloat = 0;
     let isLiftVisible = false;
-    let initialLiftRendered = false;
-    let hasDrawnLiftVisible = false;
+    let liftInitialized = false;
 
     function getLiftFramePath(idx) {
       const padded = String(idx + 1).padStart(3, '0');
@@ -531,36 +542,38 @@
       const oX = (lW - dW) / 2;
       const oY = (lH - dH) / 2;
       liftCtx.drawImage(img, oX, oY, dW, dH);
-      hasDrawnLiftVisible = true;
     }
 
     function renderLiftFrame() {
       const desiredIdx = Math.max(0, Math.min(TOTAL_LIFT_FRAMES - 1, Math.round(liftCurrentFrameFloat)));
+      const desiredUrl = getLiftFramePath(desiredIdx);
 
-      // Speculative neighbor prefetch around current scrubber index
-      if (!liftLoaded[desiredIdx]) {
-        loadLiftFrame(desiredIdx);
+      if (!globalSequenceLoader.isLoaded(desiredUrl)) {
+        globalSequenceLoader.load(desiredUrl, 1000).then(() => {
+          if (isLiftVisible) renderLiftFrame();
+        });
       }
-      for (let s = 1; s <= 4; s++) {
-        if (desiredIdx + s < TOTAL_LIFT_FRAMES && !liftLoaded[desiredIdx + s]) loadLiftFrame(desiredIdx + s);
-        if (desiredIdx - s >= 0 && !liftLoaded[desiredIdx - s]) loadLiftFrame(desiredIdx - s);
+      if (desiredIdx + 1 < TOTAL_LIFT_FRAMES) {
+        const nextUrl = getLiftFramePath(desiredIdx + 1);
+        if (!globalSequenceLoader.isLoaded(nextUrl)) globalSequenceLoader.load(nextUrl, 500);
+      }
+      if (desiredIdx - 1 >= 0) {
+        const prevUrl = getLiftFramePath(desiredIdx - 1);
+        if (!globalSequenceLoader.isLoaded(prevUrl)) globalSequenceLoader.load(prevUrl, 500);
       }
 
-      let frameToDraw = null;
-      if (liftLoaded[desiredIdx] && liftFrames[desiredIdx]) {
-        frameToDraw = liftFrames[desiredIdx];
-      } else {
-        // Nearest-neighbor fallback search so canvas is NEVER blank
+      let frameToDraw = globalSequenceLoader.getImage(desiredUrl);
+      if (!frameToDraw) {
         for (let d = 1; d < TOTAL_LIFT_FRAMES; d++) {
-          const prev = desiredIdx - d;
-          const next = desiredIdx + d;
-          if (prev >= 0 && liftLoaded[prev] && liftFrames[prev]) {
-            frameToDraw = liftFrames[prev];
-            break;
+          const prevIdx = desiredIdx - d;
+          const nextIdx = desiredIdx + d;
+          if (prevIdx >= 0) {
+            const pImg = globalSequenceLoader.getImage(getLiftFramePath(prevIdx));
+            if (pImg) { frameToDraw = pImg; break; }
           }
-          if (next < TOTAL_LIFT_FRAMES && liftLoaded[next] && liftFrames[next]) {
-            frameToDraw = liftFrames[next];
-            break;
+          if (nextIdx < TOTAL_LIFT_FRAMES) {
+            const nImg = globalSequenceLoader.getImage(getLiftFramePath(nextIdx));
+            if (nImg) { frameToDraw = nImg; break; }
           }
         }
       }
@@ -570,59 +583,14 @@
       }
     }
 
-    function loadLiftFrame(idx) {
-      if (idx < 0 || idx >= TOTAL_LIFT_FRAMES) return Promise.resolve(null);
-      if (liftFrames[idx]) return Promise.resolve(liftFrames[idx]);
-      if (liftLoadingPromises.has(idx)) return liftLoadingPromises.get(idx);
-
-      const p = new Promise((resolve) => {
-        const img = new Image();
-        img.src = getLiftFramePath(idx);
-        img.onload = () => {
-          liftFrames[idx] = img;
-          liftLoaded[idx] = true;
-          liftLoadingPromises.delete(idx);
-          if (isLiftVisible || !initialLiftRendered) {
-            initialLiftRendered = true;
-            renderLiftFrame();
-          } else {
-            const curIdx = Math.round(liftCurrentFrameFloat);
-            if (Math.abs(curIdx - idx) <= 3) {
-              renderLiftFrame();
-            }
-          }
-          resolve(img);
-        };
-        img.onerror = () => {
-          liftLoadingPromises.delete(idx);
-          resolve(null);
-        };
+    function triggerLiftActivation() {
+      if (liftInitialized) return;
+      liftInitialized = true;
+      globalSequenceLoader.load(getLiftFramePath(0), 1200).then(img => {
+        if (img) renderLiftFrame();
       });
-
-      liftLoadingPromises.set(idx, p);
-      return p;
-    }
-
-    async function preloadLiftSequence() {
-      // 1. Immediate priority: First frame painted instantly so canvas is NEVER empty
-      await loadLiftFrame(0);
-      if (!initialLiftRendered) {
-        initialLiftRendered = true;
-        resizeLiftCanvas();
-        renderLiftFrame();
-      }
-
-      // 2. Preload keyframes spaced every 4 frames
-      const keyframes = [];
-      for (let i = 2; i < TOTAL_LIFT_FRAMES; i += 4) {
-        keyframes.push(i);
-      }
-      if (!keyframes.includes(TOTAL_LIFT_FRAMES - 1)) keyframes.push(TOTAL_LIFT_FRAMES - 1);
-
-      for (let i = 0; i < keyframes.length; i += 6) {
-        const chunk = keyframes.slice(i, i + 6);
-        chunk.forEach(loadLiftFrame);
-        await new Promise((r) => setTimeout(r, 35));
+      for (let i = 3; i < TOTAL_LIFT_FRAMES; i += 3) {
+        globalSequenceLoader.load(getLiftFramePath(i), 12);
       }
     }
 
@@ -635,21 +603,20 @@
       const servicesTop = sRect.top + scrollY;
       const portfolioBottom = pRect.bottom + scrollY;
 
-      // Range where Lift is active:
-      // Fade in starts when Section 4 (Services) is coming into view
+      // Activate lift sequence when approaching Services
+      if (scrollY > Math.max(0, servicesTop - winH * 1.5)) {
+        triggerLiftActivation();
+      }
+
       const fadeInStart = Math.max(0, servicesTop - winH);
       const fadeInEnd = servicesTop;
-      // Fade out starts when reaching the bottom of Section 6 (Portfolio)
       const fadeOutStart = Math.max(servicesTop, portfolioBottom - winH);
       const fadeOutEnd = portfolioBottom;
-
-      const wasVisible = isLiftVisible;
 
       if (scrollY < fadeInStart) {
         liftViewport.style.opacity = '0';
         liftViewport.style.visibility = 'hidden';
         isLiftVisible = false;
-        hasDrawnLiftVisible = false;
       } else if (scrollY >= fadeInStart && scrollY < fadeInEnd) {
         const ratio = (scrollY - fadeInStart) / (fadeInEnd - fadeInStart);
         liftViewport.style.opacity = String(Math.max(0, Math.min(1, ratio)));
@@ -668,16 +635,13 @@
         liftViewport.style.opacity = '0';
         liftViewport.style.visibility = 'hidden';
         isLiftVisible = false;
-        hasDrawnLiftVisible = false;
       }
 
-      // Compute frame progression across the 3 sections (Services, Guardian, Portfolio)
       const scrubRange = Math.max(1, fadeOutStart - servicesTop);
       const progress = Math.min(1, Math.max(0, (scrollY - servicesTop) / scrubRange));
       liftTargetFrameFloat = progress * (TOTAL_LIFT_FRAMES - 1);
 
-      // Render immediately upon entering visibility or if canvas hasn't drawn
-      if (isLiftVisible && (!wasVisible || !hasDrawnLiftVisible)) {
+      if (isLiftVisible) {
         renderLiftFrame();
       }
     }
@@ -687,8 +651,6 @@
         const diff = liftTargetFrameFloat - liftCurrentFrameFloat;
         if (Math.abs(diff) > 0.005) {
           liftCurrentFrameFloat += diff * 0.2;
-          renderLiftFrame();
-        } else if (!hasDrawnLiftVisible) {
           renderLiftFrame();
         }
       }
@@ -702,7 +664,6 @@
 
     resizeLiftCanvas();
     updateLiftProgress();
-    preloadLiftSequence();
     requestAnimationFrame(liftAnimLoop);
   }
 
@@ -719,14 +680,10 @@
   if (buildCanvas && buildViewport && resultsSection && storySection) {
     const buildCtx = buildCanvas.getContext('2d', { alpha: false });
     const TOTAL_BUILD_FRAMES = 200;
-    const buildFrames = new Array(TOTAL_BUILD_FRAMES);
-    const buildLoaded = new Array(TOTAL_BUILD_FRAMES).fill(false);
-    const buildLoadingPromises = new Map();
     let buildTargetFrameFloat = 0;
     let buildCurrentFrameFloat = 0;
     let isBuildVisible = false;
-    let initialBuildRendered = false;
-    let hasDrawnVisible = false;
+    let buildInitialized = false;
 
     function getBuildFramePath(idx) {
       const padded = String(idx + 1).padStart(3, '0');
@@ -753,36 +710,38 @@
       const oX = (bW - dW) / 2;
       const oY = (bH - dH) / 2;
       buildCtx.drawImage(img, oX, oY, dW, dH);
-      hasDrawnVisible = true;
     }
 
     function renderBuildFrame() {
       const desiredIdx = Math.max(0, Math.min(TOTAL_BUILD_FRAMES - 1, Math.round(buildCurrentFrameFloat)));
+      const desiredUrl = getBuildFramePath(desiredIdx);
 
-      // Speculative neighbor prefetch around current scrubber index
-      if (!buildLoaded[desiredIdx]) {
-        loadBuildFrame(desiredIdx);
+      if (!globalSequenceLoader.isLoaded(desiredUrl)) {
+        globalSequenceLoader.load(desiredUrl, 1000).then(() => {
+          if (isBuildVisible) renderBuildFrame();
+        });
       }
-      for (let s = 1; s <= 4; s++) {
-        if (desiredIdx + s < TOTAL_BUILD_FRAMES && !buildLoaded[desiredIdx + s]) loadBuildFrame(desiredIdx + s);
-        if (desiredIdx - s >= 0 && !buildLoaded[desiredIdx - s]) loadBuildFrame(desiredIdx - s);
+      if (desiredIdx + 1 < TOTAL_BUILD_FRAMES) {
+        const nextUrl = getBuildFramePath(desiredIdx + 1);
+        if (!globalSequenceLoader.isLoaded(nextUrl)) globalSequenceLoader.load(nextUrl, 500);
+      }
+      if (desiredIdx - 1 >= 0) {
+        const prevUrl = getBuildFramePath(desiredIdx - 1);
+        if (!globalSequenceLoader.isLoaded(prevUrl)) globalSequenceLoader.load(prevUrl, 500);
       }
 
-      let frameToDraw = null;
-      if (buildLoaded[desiredIdx] && buildFrames[desiredIdx]) {
-        frameToDraw = buildFrames[desiredIdx];
-      } else {
-        // Nearest-neighbor fallback search so canvas is never blank
+      let frameToDraw = globalSequenceLoader.getImage(desiredUrl);
+      if (!frameToDraw) {
         for (let d = 1; d < TOTAL_BUILD_FRAMES; d++) {
-          const prev = desiredIdx - d;
-          const next = desiredIdx + d;
-          if (prev >= 0 && buildLoaded[prev] && buildFrames[prev]) {
-            frameToDraw = buildFrames[prev];
-            break;
+          const prevIdx = desiredIdx - d;
+          const nextIdx = desiredIdx + d;
+          if (prevIdx >= 0) {
+            const pImg = globalSequenceLoader.getImage(getBuildFramePath(prevIdx));
+            if (pImg) { frameToDraw = pImg; break; }
           }
-          if (next < TOTAL_BUILD_FRAMES && buildLoaded[next] && buildFrames[next]) {
-            frameToDraw = buildFrames[next];
-            break;
+          if (nextIdx < TOTAL_BUILD_FRAMES) {
+            const nImg = globalSequenceLoader.getImage(getBuildFramePath(nextIdx));
+            if (nImg) { frameToDraw = nImg; break; }
           }
         }
       }
@@ -792,61 +751,14 @@
       }
     }
 
-    function loadBuildFrame(idx) {
-      if (idx < 0 || idx >= TOTAL_BUILD_FRAMES) return Promise.resolve(null);
-      if (buildFrames[idx]) return Promise.resolve(buildFrames[idx]);
-      if (buildLoadingPromises.has(idx)) return buildLoadingPromises.get(idx);
-
-      const p = new Promise((resolve) => {
-        const img = new Image();
-        img.src = getBuildFramePath(idx);
-        img.onload = () => {
-          buildFrames[idx] = img;
-          buildLoaded[idx] = true;
-          buildLoadingPromises.delete(idx);
-          if (isBuildVisible || !initialBuildRendered) {
-            initialBuildRendered = true;
-            renderBuildFrame();
-          } else {
-            const curIdx = Math.round(buildCurrentFrameFloat);
-            if (Math.abs(curIdx - idx) <= 2) {
-              renderBuildFrame();
-            }
-          }
-          resolve(img);
-        };
-        img.onerror = () => {
-          buildLoadingPromises.delete(idx);
-          resolve(null);
-        };
+    function triggerBuildActivation() {
+      if (buildInitialized) return;
+      buildInitialized = true;
+      globalSequenceLoader.load(getBuildFramePath(0), 1200).then(img => {
+        if (img) renderBuildFrame();
       });
-
-      buildLoadingPromises.set(idx, p);
-      return p;
-    }
-
-    async function preloadBuildSequence() {
-      // 1. Immediate priority: First frame painted instantly
-      await loadBuildFrame(0);
-      if (!initialBuildRendered) {
-        initialBuildRendered = true;
-        resizeBuildCanvas();
-        renderBuildFrame();
-      }
-
-      // 2. Preload keyframes spaced every 4 frames
-      const keyframes = [];
-      for (let i = 2; i < TOTAL_BUILD_FRAMES; i += 4) {
-        keyframes.push(i);
-      }
-      if (!keyframes.includes(TOTAL_BUILD_FRAMES - 1)) {
-        keyframes.push(TOTAL_BUILD_FRAMES - 1);
-      }
-
-      for (let i = 0; i < keyframes.length; i += 6) {
-        const chunk = keyframes.slice(i, i + 6);
-        chunk.forEach(loadBuildFrame);
-        await new Promise((r) => setTimeout(r, 35));
+      for (let i = 3; i < TOTAL_BUILD_FRAMES; i += 3) {
+        globalSequenceLoader.load(getBuildFramePath(i), 12);
       }
     }
 
@@ -859,21 +771,19 @@
       const resultsTop = rRect.top + scrollY;
       const storyBottom = sRect.bottom + scrollY;
 
-      // Range where Build animation is active:
-      // Fade in starts when Section 7 (Results) is coming into view
+      if (scrollY > Math.max(0, resultsTop - winH * 1.5)) {
+        triggerBuildActivation();
+      }
+
       const fadeInStart = Math.max(0, resultsTop - winH);
       const fadeInEnd = resultsTop;
-      // Fade out starts when reaching the bottom of Section 9 (Story)
       const fadeOutStart = Math.max(resultsTop, storyBottom - winH);
       const fadeOutEnd = storyBottom;
-
-      const wasVisible = isBuildVisible;
 
       if (scrollY < fadeInStart) {
         buildViewport.style.opacity = '0';
         buildViewport.style.visibility = 'hidden';
         isBuildVisible = false;
-        hasDrawnVisible = false;
       } else if (scrollY >= fadeInStart && scrollY < fadeInEnd) {
         const ratio = (scrollY - fadeInStart) / (fadeInEnd - fadeInStart);
         buildViewport.style.opacity = String(Math.max(0, Math.min(1, ratio)));
@@ -892,16 +802,13 @@
         buildViewport.style.opacity = '0';
         buildViewport.style.visibility = 'hidden';
         isBuildVisible = false;
-        hasDrawnVisible = false;
       }
 
-      // Compute frame progression across the 3 sections (Results, Industries, Story)
       const scrubRange = Math.max(1, fadeOutStart - resultsTop);
       const progress = Math.min(1, Math.max(0, (scrollY - resultsTop) / scrubRange));
       buildTargetFrameFloat = progress * (TOTAL_BUILD_FRAMES - 1);
 
-      // Render immediately upon entering visibility or if canvas hasn't drawn
-      if (isBuildVisible && (!wasVisible || !hasDrawnVisible)) {
+      if (isBuildVisible) {
         renderBuildFrame();
       }
     }
@@ -909,10 +816,8 @@
     function buildAnimLoop() {
       if (isBuildVisible) {
         const diff = buildTargetFrameFloat - buildCurrentFrameFloat;
-        if (Math.abs(diff) > 0.001) {
+        if (Math.abs(diff) > 0.005) {
           buildCurrentFrameFloat += diff * 0.2;
-          renderBuildFrame();
-        } else if (!hasDrawnVisible) {
           renderBuildFrame();
         }
       }
@@ -926,7 +831,6 @@
 
     resizeBuildCanvas();
     updateBuildProgress();
-    preloadBuildSequence();
     requestAnimationFrame(buildAnimLoop);
   }
 
@@ -943,14 +847,10 @@
   if (handCanvas && handViewport && techSection && testimonialsSection) {
     const handCtx = handCanvas.getContext('2d', { alpha: false });
     const TOTAL_HAND_FRAMES = 192;
-    const handFrames = new Array(TOTAL_HAND_FRAMES);
-    const handLoaded = new Array(TOTAL_HAND_FRAMES).fill(false);
-    const handLoadingPromises = new Map();
     let handTargetFrameFloat = 0;
     let handCurrentFrameFloat = 0;
     let isHandVisible = false;
-    let initialHandRendered = false;
-    let hasDrawnHandVisible = false;
+    let handInitialized = false;
 
     function getHandFramePath(idx) {
       const padded = String(idx + 1).padStart(3, '0');
@@ -977,36 +877,38 @@
       const oX = (hW - dW) / 2;
       const oY = (hH - dH) / 2;
       handCtx.drawImage(img, oX, oY, dW, dH);
-      hasDrawnHandVisible = true;
     }
 
     function renderHandFrame() {
       const desiredIdx = Math.max(0, Math.min(TOTAL_HAND_FRAMES - 1, Math.round(handCurrentFrameFloat)));
+      const desiredUrl = getHandFramePath(desiredIdx);
 
-      // Speculative neighbor prefetch around current scrubber index
-      if (!handLoaded[desiredIdx]) {
-        loadHandFrame(desiredIdx);
+      if (!globalSequenceLoader.isLoaded(desiredUrl)) {
+        globalSequenceLoader.load(desiredUrl, 1000).then(() => {
+          if (isHandVisible) renderHandFrame();
+        });
       }
-      for (let s = 1; s <= 4; s++) {
-        if (desiredIdx + s < TOTAL_HAND_FRAMES && !handLoaded[desiredIdx + s]) loadHandFrame(desiredIdx + s);
-        if (desiredIdx - s >= 0 && !handLoaded[desiredIdx - s]) loadHandFrame(desiredIdx - s);
+      if (desiredIdx + 1 < TOTAL_HAND_FRAMES) {
+        const nextUrl = getHandFramePath(desiredIdx + 1);
+        if (!globalSequenceLoader.isLoaded(nextUrl)) globalSequenceLoader.load(nextUrl, 500);
+      }
+      if (desiredIdx - 1 >= 0) {
+        const prevUrl = getHandFramePath(desiredIdx - 1);
+        if (!globalSequenceLoader.isLoaded(prevUrl)) globalSequenceLoader.load(prevUrl, 500);
       }
 
-      let frameToDraw = null;
-      if (handLoaded[desiredIdx] && handFrames[desiredIdx]) {
-        frameToDraw = handFrames[desiredIdx];
-      } else {
-        // Nearest-neighbor fallback search so canvas is never blank
+      let frameToDraw = globalSequenceLoader.getImage(desiredUrl);
+      if (!frameToDraw) {
         for (let d = 1; d < TOTAL_HAND_FRAMES; d++) {
-          const prev = desiredIdx - d;
-          const next = desiredIdx + d;
-          if (prev >= 0 && handLoaded[prev] && handFrames[prev]) {
-            frameToDraw = handFrames[prev];
-            break;
+          const prevIdx = desiredIdx - d;
+          const nextIdx = desiredIdx + d;
+          if (prevIdx >= 0) {
+            const pImg = globalSequenceLoader.getImage(getHandFramePath(prevIdx));
+            if (pImg) { frameToDraw = pImg; break; }
           }
-          if (next < TOTAL_HAND_FRAMES && handLoaded[next] && handFrames[next]) {
-            frameToDraw = handFrames[next];
-            break;
+          if (nextIdx < TOTAL_HAND_FRAMES) {
+            const nImg = globalSequenceLoader.getImage(getHandFramePath(nextIdx));
+            if (nImg) { frameToDraw = nImg; break; }
           }
         }
       }
@@ -1016,61 +918,14 @@
       }
     }
 
-    function loadHandFrame(idx) {
-      if (idx < 0 || idx >= TOTAL_HAND_FRAMES) return Promise.resolve(null);
-      if (handFrames[idx]) return Promise.resolve(handFrames[idx]);
-      if (handLoadingPromises.has(idx)) return handLoadingPromises.get(idx);
-
-      const p = new Promise((resolve) => {
-        const img = new Image();
-        img.src = getHandFramePath(idx);
-        img.onload = () => {
-          handFrames[idx] = img;
-          handLoaded[idx] = true;
-          handLoadingPromises.delete(idx);
-          if (isHandVisible || !initialHandRendered) {
-            initialHandRendered = true;
-            renderHandFrame();
-          } else {
-            const curIdx = Math.round(handCurrentFrameFloat);
-            if (Math.abs(curIdx - idx) <= 2) {
-              renderHandFrame();
-            }
-          }
-          resolve(img);
-        };
-        img.onerror = () => {
-          handLoadingPromises.delete(idx);
-          resolve(null);
-        };
+    function triggerHandActivation() {
+      if (handInitialized) return;
+      handInitialized = true;
+      globalSequenceLoader.load(getHandFramePath(0), 1200).then(img => {
+        if (img) renderHandFrame();
       });
-
-      handLoadingPromises.set(idx, p);
-      return p;
-    }
-
-    async function preloadHandSequence() {
-      // 1. Immediate priority: First frame painted instantly so canvas is never blank
-      await loadHandFrame(0);
-      if (!initialHandRendered) {
-        initialHandRendered = true;
-        resizeHandCanvas();
-        renderHandFrame();
-      }
-
-      // 2. Preload keyframes spaced every 4 frames
-      const keyframes = [];
-      for (let i = 2; i < TOTAL_HAND_FRAMES; i += 4) {
-        keyframes.push(i);
-      }
-      if (!keyframes.includes(TOTAL_HAND_FRAMES - 1)) {
-        keyframes.push(TOTAL_HAND_FRAMES - 1);
-      }
-
-      for (let i = 0; i < keyframes.length; i += 6) {
-        const chunk = keyframes.slice(i, i + 6);
-        chunk.forEach(loadHandFrame);
-        await new Promise((r) => setTimeout(r, 35));
+      for (let i = 3; i < TOTAL_HAND_FRAMES; i += 3) {
+        globalSequenceLoader.load(getHandFramePath(i), 12);
       }
     }
 
@@ -1081,23 +936,21 @@
       const tRect = techSection.getBoundingClientRect();
       const testRect = testimonialsSection.getBoundingClientRect();
       const techTop = tRect.top + scrollY;
-      const testiBottom = testRect.bottom + scrollY;
+      const testBottom = testRect.bottom + scrollY;
 
-      // Range where Hand animation is active:
-      // Fade in starts when Section 10 (Tech Ecosystem) is coming into view
+      if (scrollY > Math.max(0, techTop - winH * 1.5)) {
+        triggerHandActivation();
+      }
+
       const fadeInStart = Math.max(0, techTop - winH);
       const fadeInEnd = techTop;
-      // Fade out starts when reaching the bottom of Section 12 (Testimonials)
-      const fadeOutStart = Math.max(techTop, testiBottom - winH);
-      const fadeOutEnd = testiBottom;
-
-      const wasVisible = isHandVisible;
+      const fadeOutStart = Math.max(techTop, testBottom - winH);
+      const fadeOutEnd = testBottom;
 
       if (scrollY < fadeInStart) {
         handViewport.style.opacity = '0';
         handViewport.style.visibility = 'hidden';
         isHandVisible = false;
-        hasDrawnHandVisible = false;
       } else if (scrollY >= fadeInStart && scrollY < fadeInEnd) {
         const ratio = (scrollY - fadeInStart) / (fadeInEnd - fadeInStart);
         handViewport.style.opacity = String(Math.max(0, Math.min(1, ratio)));
@@ -1116,16 +969,13 @@
         handViewport.style.opacity = '0';
         handViewport.style.visibility = 'hidden';
         isHandVisible = false;
-        hasDrawnHandVisible = false;
       }
 
-      // Compute frame progression across the 3 sections (Tech Ecosystem, AI Future, Testimonials)
       const scrubRange = Math.max(1, fadeOutStart - techTop);
       const progress = Math.min(1, Math.max(0, (scrollY - techTop) / scrubRange));
       handTargetFrameFloat = progress * (TOTAL_HAND_FRAMES - 1);
 
-      // Render immediately upon entering visibility or if canvas hasn't drawn
-      if (isHandVisible && (!wasVisible || !hasDrawnHandVisible)) {
+      if (isHandVisible) {
         renderHandFrame();
       }
     }
@@ -1133,10 +983,8 @@
     function handAnimLoop() {
       if (isHandVisible) {
         const diff = handTargetFrameFloat - handCurrentFrameFloat;
-        if (Math.abs(diff) > 0.001) {
+        if (Math.abs(diff) > 0.005) {
           handCurrentFrameFloat += diff * 0.2;
-          renderHandFrame();
-        } else if (!hasDrawnHandVisible) {
           renderHandFrame();
         }
       }
@@ -1150,7 +998,6 @@
 
     resizeHandCanvas();
     updateHandProgress();
-    preloadHandSequence();
     requestAnimationFrame(handAnimLoop);
   }
 
@@ -1167,14 +1014,10 @@
   if (radioCanvas && radioViewport && estimatorSection && footerSection) {
     const radioCtx = radioCanvas.getContext('2d', { alpha: false });
     const TOTAL_RADIO_FRAMES = 200;
-    const radioFrames = new Array(TOTAL_RADIO_FRAMES);
-    const radioLoaded = new Array(TOTAL_RADIO_FRAMES).fill(false);
-    const radioLoadingPromises = new Map();
     let radioTargetFrameFloat = 0;
     let radioCurrentFrameFloat = 0;
     let isRadioVisible = false;
-    let initialRadioRendered = false;
-    let hasDrawnRadioVisible = false;
+    let radioInitialized = false;
 
     function getRadioFramePath(idx) {
       const padded = String(idx + 1).padStart(3, '0');
@@ -1201,36 +1044,38 @@
       const oX = (rW - dW) / 2;
       const oY = (rH - dH) / 2;
       radioCtx.drawImage(img, oX, oY, dW, dH);
-      hasDrawnRadioVisible = true;
     }
 
     function renderRadioFrame() {
       const desiredIdx = Math.max(0, Math.min(TOTAL_RADIO_FRAMES - 1, Math.round(radioCurrentFrameFloat)));
+      const desiredUrl = getRadioFramePath(desiredIdx);
 
-      // Speculative neighbor prefetch around current scrubber index
-      if (!radioLoaded[desiredIdx]) {
-        loadRadioFrame(desiredIdx);
+      if (!globalSequenceLoader.isLoaded(desiredUrl)) {
+        globalSequenceLoader.load(desiredUrl, 1000).then(() => {
+          if (isRadioVisible) renderRadioFrame();
+        });
       }
-      for (let s = 1; s <= 4; s++) {
-        if (desiredIdx + s < TOTAL_RADIO_FRAMES && !radioLoaded[desiredIdx + s]) loadRadioFrame(desiredIdx + s);
-        if (desiredIdx - s >= 0 && !radioLoaded[desiredIdx - s]) loadRadioFrame(desiredIdx - s);
+      if (desiredIdx + 1 < TOTAL_RADIO_FRAMES) {
+        const nextUrl = getRadioFramePath(desiredIdx + 1);
+        if (!globalSequenceLoader.isLoaded(nextUrl)) globalSequenceLoader.load(nextUrl, 500);
+      }
+      if (desiredIdx - 1 >= 0) {
+        const prevUrl = getRadioFramePath(desiredIdx - 1);
+        if (!globalSequenceLoader.isLoaded(prevUrl)) globalSequenceLoader.load(prevUrl, 500);
       }
 
-      let frameToDraw = null;
-      if (radioLoaded[desiredIdx] && radioFrames[desiredIdx]) {
-        frameToDraw = radioFrames[desiredIdx];
-      } else {
-        // Nearest-neighbor fallback search so canvas is never blank
+      let frameToDraw = globalSequenceLoader.getImage(desiredUrl);
+      if (!frameToDraw) {
         for (let d = 1; d < TOTAL_RADIO_FRAMES; d++) {
-          const prev = desiredIdx - d;
-          const next = desiredIdx + d;
-          if (prev >= 0 && radioLoaded[prev] && radioFrames[prev]) {
-            frameToDraw = radioFrames[prev];
-            break;
+          const prevIdx = desiredIdx - d;
+          const nextIdx = desiredIdx + d;
+          if (prevIdx >= 0) {
+            const pImg = globalSequenceLoader.getImage(getRadioFramePath(prevIdx));
+            if (pImg) { frameToDraw = pImg; break; }
           }
-          if (next < TOTAL_RADIO_FRAMES && radioLoaded[next] && radioFrames[next]) {
-            frameToDraw = radioFrames[next];
-            break;
+          if (nextIdx < TOTAL_RADIO_FRAMES) {
+            const nImg = globalSequenceLoader.getImage(getRadioFramePath(nextIdx));
+            if (nImg) { frameToDraw = nImg; break; }
           }
         }
       }
@@ -1240,61 +1085,14 @@
       }
     }
 
-    function loadRadioFrame(idx) {
-      if (idx < 0 || idx >= TOTAL_RADIO_FRAMES) return Promise.resolve(null);
-      if (radioFrames[idx]) return Promise.resolve(radioFrames[idx]);
-      if (radioLoadingPromises.has(idx)) return radioLoadingPromises.get(idx);
-
-      const p = new Promise((resolve) => {
-        const img = new Image();
-        img.src = getRadioFramePath(idx);
-        img.onload = () => {
-          radioFrames[idx] = img;
-          radioLoaded[idx] = true;
-          radioLoadingPromises.delete(idx);
-          if (isRadioVisible || !initialRadioRendered) {
-            initialRadioRendered = true;
-            renderRadioFrame();
-          } else {
-            const curIdx = Math.round(radioCurrentFrameFloat);
-            if (Math.abs(curIdx - idx) <= 2) {
-              renderRadioFrame();
-            }
-          }
-          resolve(img);
-        };
-        img.onerror = () => {
-          radioLoadingPromises.delete(idx);
-          resolve(null);
-        };
+    function triggerRadioActivation() {
+      if (radioInitialized) return;
+      radioInitialized = true;
+      globalSequenceLoader.load(getRadioFramePath(0), 1200).then(img => {
+        if (img) renderRadioFrame();
       });
-
-      radioLoadingPromises.set(idx, p);
-      return p;
-    }
-
-    async function preloadRadioSequence() {
-      // 1. Immediate priority: First frame painted instantly so canvas is never blank
-      await loadRadioFrame(0);
-      if (!initialRadioRendered) {
-        initialRadioRendered = true;
-        resizeRadioCanvas();
-        renderRadioFrame();
-      }
-
-      // 2. Preload keyframes spaced every 4 frames
-      const keyframes = [];
-      for (let i = 2; i < TOTAL_RADIO_FRAMES; i += 4) {
-        keyframes.push(i);
-      }
-      if (!keyframes.includes(TOTAL_RADIO_FRAMES - 1)) {
-        keyframes.push(TOTAL_RADIO_FRAMES - 1);
-      }
-
-      for (let i = 0; i < keyframes.length; i += 6) {
-        const chunk = keyframes.slice(i, i + 6);
-        chunk.forEach(loadRadioFrame);
-        await new Promise((r) => setTimeout(r, 35));
+      for (let i = 3; i < TOTAL_RADIO_FRAMES; i += 3) {
+        globalSequenceLoader.load(getRadioFramePath(i), 12);
       }
     }
 
@@ -1302,43 +1100,38 @@
       const scrollY = (e && typeof e.scroll === 'number') ? e.scroll : (window.lenis && typeof window.lenis.scroll === 'number' ? window.lenis.scroll : window.scrollY);
       const winH = window.innerHeight;
 
-      const estRect = estimatorSection.getBoundingClientRect();
-      const footRect = footerSection.getBoundingClientRect();
-      const estimatorTop = estRect.top + scrollY;
-      const footerBottom = footRect.bottom + scrollY;
+      const eRect = estimatorSection.getBoundingClientRect();
+      const fRect = footerSection.getBoundingClientRect();
+      const estimatorTop = eRect.top + scrollY;
+      const footerBottom = fRect.bottom + scrollY;
 
-      // Range where Radio animation is active:
-      // Fade in starts when Section 13 (Estimator) is coming into view
+      if (scrollY > Math.max(0, estimatorTop - winH * 1.5)) {
+        triggerRadioActivation();
+      }
+
       const fadeInStart = Math.max(0, estimatorTop - winH);
       const fadeInEnd = estimatorTop;
-      const maxScroll = Math.max(estimatorTop, footerBottom - winH);
-
-      const wasVisible = isRadioVisible;
 
       if (scrollY < fadeInStart) {
         radioViewport.style.opacity = '0';
         radioViewport.style.visibility = 'hidden';
         isRadioVisible = false;
-        hasDrawnRadioVisible = false;
       } else if (scrollY >= fadeInStart && scrollY < fadeInEnd) {
         const ratio = (scrollY - fadeInStart) / (fadeInEnd - fadeInStart);
         radioViewport.style.opacity = String(Math.max(0, Math.min(1, ratio)));
         radioViewport.style.visibility = 'visible';
         isRadioVisible = true;
       } else {
-        // Active and fully visible across Section 13 (Estimator), Section 14 (Contact), Section 15 (Footer)
         radioViewport.style.opacity = '1';
         radioViewport.style.visibility = 'visible';
         isRadioVisible = true;
       }
 
-      // Compute frame progression across the final 3 sections (Estimator, Contact, Footer)
-      const scrubRange = Math.max(1, maxScroll - estimatorTop);
+      const scrubRange = Math.max(1, footerBottom - estimatorTop);
       const progress = Math.min(1, Math.max(0, (scrollY - estimatorTop) / scrubRange));
       radioTargetFrameFloat = progress * (TOTAL_RADIO_FRAMES - 1);
 
-      // Render immediately upon entering visibility or if canvas hasn't drawn
-      if (isRadioVisible && (!wasVisible || !hasDrawnRadioVisible)) {
+      if (isRadioVisible) {
         renderRadioFrame();
       }
     }
@@ -1346,10 +1139,8 @@
     function radioAnimLoop() {
       if (isRadioVisible) {
         const diff = radioTargetFrameFloat - radioCurrentFrameFloat;
-        if (Math.abs(diff) > 0.001) {
+        if (Math.abs(diff) > 0.005) {
           radioCurrentFrameFloat += diff * 0.2;
-          renderRadioFrame();
-        } else if (!hasDrawnRadioVisible) {
           renderRadioFrame();
         }
       }
@@ -1363,11 +1154,9 @@
 
     resizeRadioCanvas();
     updateRadioProgress();
-    preloadRadioSequence();
     requestAnimationFrame(radioAnimLoop);
   }
 
-  // ==========================================================================
   // 5. FLOATING HEADER & MOBILE DRAWER (Section 5)
   // ==========================================================================
   const siteHeader = document.getElementById('site-header');
