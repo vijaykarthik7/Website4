@@ -274,7 +274,7 @@
 
     function getFramePath(idx) {
       const padded = String(idx + 1).padStart(3, '0');
-      return `fall/ezgif-frame-${padded}.png`;
+      return `fall/ezgif-frame-${padded}.webp`;
     }
 
     let cW = 0;
@@ -535,7 +535,7 @@
 
     function getLiftFramePath(idx) {
       const padded = String(idx + 1).padStart(3, '0');
-      return `lift/ezgif-frame-${padded}.png`;
+      return `lift/ezgif-frame-${padded}.webp`;
     }
 
     let lW = (liftCanvas.width = window.innerWidth);
@@ -780,7 +780,7 @@
 
     function getBuildFramePath(idx) {
       const padded = String(idx + 1).padStart(3, '0');
-      return `build/ezgif-frame-${padded}.png`;
+      return `build/ezgif-frame-${padded}.webp`;
     }
 
     let bW = (buildCanvas.width = window.innerWidth);
@@ -1027,7 +1027,7 @@
 
     function getHandFramePath(idx) {
       const padded = String(idx + 1).padStart(3, '0');
-      return `hand/ezgif-frame-${padded}.png`;
+      return `hand/ezgif-frame-${padded}.webp`;
     }
 
     let hW = (handCanvas.width = window.innerWidth);
@@ -1274,7 +1274,7 @@
 
     function getRadioFramePath(idx) {
       const padded = String(idx + 1).padStart(3, '0');
-      return `radio/ezgif-frame-${padded}.png`;
+      return `radio/ezgif-frame-${padded}.webp`;
     }
 
     let rW = (radioCanvas.width = window.innerWidth);
