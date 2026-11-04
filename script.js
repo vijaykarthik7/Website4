@@ -351,10 +351,7 @@
             resizeFallCanvas();
             renderFallFrame();
           } else if (isFallVisible) {
-            const curIdx = Math.round(currentFrameFloat);
-            if (Math.abs(curIdx - idx) <= 3) {
-              renderFallFrame();
-            }
+            renderFallFrame();
           }
           resolve(img);
         };
@@ -377,42 +374,19 @@
         renderFallFrame();
       }
 
-      // 2. Preload early Hero keyframes in small unblocking batches
-      const earlyKeyframes = [3, 6, 9, 12, 15, 18, 22, 26, 30];
-      for (let i = 0; i < earlyKeyframes.length; i += 3) {
-        const batch = earlyKeyframes.slice(i, i + 3);
-        await Promise.all(batch.map(loadFrame));
-      }
-
-      // 3. Staggered background loading of remainder keyframes
+      // 2. Preload keyframes across entire sequence so scrubbing is always immediate
       const keyframes = [];
-      for (let i = 34; i < TOTAL_FRAMES; i += 6) {
+      for (let i = 2; i < TOTAL_FRAMES; i += 4) {
         keyframes.push(i);
       }
       if (!keyframes.includes(TOTAL_FRAMES - 1)) {
         keyframes.push(TOTAL_FRAMES - 1);
       }
 
-      let kIdx = 0;
-      function loadNextBatch() {
-        if (kIdx >= keyframes.length) return;
-        const batch = keyframes.slice(kIdx, kIdx + 3);
-        kIdx += 3;
-        Promise.all(batch.map(loadFrame)).then(() => {
-          if (kIdx < keyframes.length) {
-            if ('requestIdleCallback' in window) {
-              requestIdleCallback(loadNextBatch, { timeout: 250 });
-            } else {
-              setTimeout(loadNextBatch, 80);
-            }
-          }
-        });
-      }
-
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(loadNextBatch, { timeout: 300 });
-      } else {
-        setTimeout(loadNextBatch, 100);
+      for (let i = 0; i < keyframes.length; i += 6) {
+        const chunk = keyframes.slice(i, i + 6);
+        chunk.forEach(loadFrame);
+        await new Promise((r) => setTimeout(r, 35));
       }
     }
 
@@ -639,40 +613,17 @@
         renderLiftFrame();
       }
 
-      // 2. Early keyframes in gentle unblocking chunks
-      const earlyKeyframes = [4, 8, 12, 16, 20, 24];
-      for (let i = 0; i < earlyKeyframes.length; i += 3) {
-        const batch = earlyKeyframes.slice(i, i + 3);
-        await Promise.all(batch.map(loadLiftFrame));
-      }
-
-      // 3. Staggered background loading of intermediate keyframes
+      // 2. Preload keyframes spaced every 4 frames
       const keyframes = [];
-      for (let i = 28; i < TOTAL_LIFT_FRAMES; i += 6) {
+      for (let i = 2; i < TOTAL_LIFT_FRAMES; i += 4) {
         keyframes.push(i);
       }
       if (!keyframes.includes(TOTAL_LIFT_FRAMES - 1)) keyframes.push(TOTAL_LIFT_FRAMES - 1);
 
-      let kIdx = 0;
-      function loadNextLiftBatch() {
-        if (kIdx >= keyframes.length) return;
-        const batch = keyframes.slice(kIdx, kIdx + 3);
-        kIdx += 3;
-        Promise.all(batch.map(loadLiftFrame)).then(() => {
-          if (kIdx < keyframes.length) {
-            if ('requestIdleCallback' in window) {
-              requestIdleCallback(loadNextLiftBatch, { timeout: 250 });
-            } else {
-              setTimeout(loadNextLiftBatch, 70);
-            }
-          }
-        });
-      }
-
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(loadNextLiftBatch, { timeout: 350 });
-      } else {
-        setTimeout(loadNextLiftBatch, 100);
+      for (let i = 0; i < keyframes.length; i += 6) {
+        const chunk = keyframes.slice(i, i + 6);
+        chunk.forEach(loadLiftFrame);
+        await new Promise((r) => setTimeout(r, 35));
       }
     }
 
@@ -884,42 +835,19 @@
         renderBuildFrame();
       }
 
-      // 2. Early keyframes in gentle unblocking chunks
-      const earlyKeyframes = [4, 8, 12, 16, 20, 24];
-      for (let i = 0; i < earlyKeyframes.length; i += 3) {
-        const batch = earlyKeyframes.slice(i, i + 3);
-        await Promise.all(batch.map(loadBuildFrame));
-      }
-
-      // 3. Staggered background loading of intermediate keyframes
+      // 2. Preload keyframes spaced every 4 frames
       const keyframes = [];
-      for (let i = 28; i < TOTAL_BUILD_FRAMES; i += 6) {
+      for (let i = 2; i < TOTAL_BUILD_FRAMES; i += 4) {
         keyframes.push(i);
       }
       if (!keyframes.includes(TOTAL_BUILD_FRAMES - 1)) {
         keyframes.push(TOTAL_BUILD_FRAMES - 1);
       }
 
-      let kIdx = 0;
-      function loadNextBatch() {
-        if (kIdx >= keyframes.length) return;
-        const batch = keyframes.slice(kIdx, kIdx + 3);
-        kIdx += 3;
-        Promise.all(batch.map(loadBuildFrame)).then(() => {
-          if (kIdx < keyframes.length) {
-            if ('requestIdleCallback' in window) {
-              requestIdleCallback(loadNextBatch, { timeout: 250 });
-            } else {
-              setTimeout(loadNextBatch, 70);
-            }
-          }
-        });
-      }
-
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(loadNextBatch, { timeout: 350 });
-      } else {
-        setTimeout(loadNextBatch, 100);
+      for (let i = 0; i < keyframes.length; i += 6) {
+        const chunk = keyframes.slice(i, i + 6);
+        chunk.forEach(loadBuildFrame);
+        await new Promise((r) => setTimeout(r, 35));
       }
     }
 
@@ -1131,42 +1059,19 @@
         renderHandFrame();
       }
 
-      // 2. Early keyframes in gentle unblocking chunks
-      const earlyKeyframes = [4, 8, 12, 16, 20, 24];
-      for (let i = 0; i < earlyKeyframes.length; i += 3) {
-        const batch = earlyKeyframes.slice(i, i + 3);
-        await Promise.all(batch.map(loadHandFrame));
-      }
-
-      // 3. Staggered background loading of intermediate keyframes
+      // 2. Preload keyframes spaced every 4 frames
       const keyframes = [];
-      for (let i = 28; i < TOTAL_HAND_FRAMES; i += 6) {
+      for (let i = 2; i < TOTAL_HAND_FRAMES; i += 4) {
         keyframes.push(i);
       }
       if (!keyframes.includes(TOTAL_HAND_FRAMES - 1)) {
         keyframes.push(TOTAL_HAND_FRAMES - 1);
       }
 
-      let kIdx = 0;
-      function loadNextBatch() {
-        if (kIdx >= keyframes.length) return;
-        const batch = keyframes.slice(kIdx, kIdx + 3);
-        kIdx += 3;
-        Promise.all(batch.map(loadHandFrame)).then(() => {
-          if (kIdx < keyframes.length) {
-            if ('requestIdleCallback' in window) {
-              requestIdleCallback(loadNextBatch, { timeout: 250 });
-            } else {
-              setTimeout(loadNextBatch, 70);
-            }
-          }
-        });
-      }
-
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(loadNextBatch, { timeout: 350 });
-      } else {
-        setTimeout(loadNextBatch, 100);
+      for (let i = 0; i < keyframes.length; i += 6) {
+        const chunk = keyframes.slice(i, i + 6);
+        chunk.forEach(loadHandFrame);
+        await new Promise((r) => setTimeout(r, 35));
       }
     }
 
@@ -1378,42 +1283,19 @@
         renderRadioFrame();
       }
 
-      // 2. Early keyframes in gentle unblocking chunks
-      const earlyKeyframes = [4, 8, 12, 16, 20, 24];
-      for (let i = 0; i < earlyKeyframes.length; i += 3) {
-        const batch = earlyKeyframes.slice(i, i + 3);
-        await Promise.all(batch.map(loadRadioFrame));
-      }
-
-      // 3. Staggered background loading of intermediate keyframes
+      // 2. Preload keyframes spaced every 4 frames
       const keyframes = [];
-      for (let i = 28; i < TOTAL_RADIO_FRAMES; i += 6) {
+      for (let i = 2; i < TOTAL_RADIO_FRAMES; i += 4) {
         keyframes.push(i);
       }
       if (!keyframes.includes(TOTAL_RADIO_FRAMES - 1)) {
         keyframes.push(TOTAL_RADIO_FRAMES - 1);
       }
 
-      let kIdx = 0;
-      function loadNextBatch() {
-        if (kIdx >= keyframes.length) return;
-        const batch = keyframes.slice(kIdx, kIdx + 3);
-        kIdx += 3;
-        Promise.all(batch.map(loadRadioFrame)).then(() => {
-          if (kIdx < keyframes.length) {
-            if ('requestIdleCallback' in window) {
-              requestIdleCallback(loadNextBatch, { timeout: 250 });
-            } else {
-              setTimeout(loadNextBatch, 70);
-            }
-          }
-        });
-      }
-
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(loadNextBatch, { timeout: 350 });
-      } else {
-        setTimeout(loadNextBatch, 100);
+      for (let i = 0; i < keyframes.length; i += 6) {
+        const chunk = keyframes.slice(i, i + 6);
+        chunk.forEach(loadRadioFrame);
+        await new Promise((r) => setTimeout(r, 35));
       }
     }
 

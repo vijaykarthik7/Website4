@@ -29,15 +29,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&family=Syne:wght@600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=20261104_webp_v1">
+  <link rel="stylesheet" href="style.css?v=20261104_fastload_v3">
 
-  <!-- Three.js for selected 3D experiences -->
-  <script src="assets/three.min.js" defer></script>
-  <!-- Lenis for smooth momentum scrolling -->
-  <script src="assets/lenis.min.js" defer></script>
-  <!-- GSAP & ScrollTrigger for Story Scroll component -->
-  <script src="assets/gsap.min.js" defer></script>
-  <script src="assets/ScrollTrigger.min.js" defer></script>
+  <!-- Production Global CDN Scripts (Brotli compressed, <50ms edge delivery) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.20/dist/lenis.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
 
   <!-- Structured Schema Markup (JSON-LD) -->
   <script type="application/ld+json">
@@ -108,6 +106,46 @@
       </div>
     </div>
   </div>
+  <script>
+    (function () {
+      var p = document.getElementById('preloader');
+      var bar = document.getElementById('preloader-bar-fill');
+      var progress = 0;
+      var timer = setInterval(function () {
+        progress += 12;
+        if (bar) bar.style.width = Math.min(100, progress) + '%';
+        if (progress >= 100) {
+          clearInterval(timer);
+          document.body.classList.remove('loading-state');
+          if (p) {
+            p.style.opacity = '0';
+            p.style.pointerEvents = 'none';
+            setTimeout(function () { p.style.display = 'none'; }, 400);
+          }
+        }
+      }, 40);
+      window.addEventListener('load', function () {
+        clearInterval(timer);
+        if (bar) bar.style.width = '100%';
+        document.body.classList.remove('loading-state');
+        if (p) {
+          p.style.opacity = '0';
+          p.style.pointerEvents = 'none';
+          setTimeout(function () { p.style.display = 'none'; }, 250);
+        }
+      }, { once: true });
+      setTimeout(function () {
+        clearInterval(timer);
+        if (bar) bar.style.width = '100%';
+        document.body.classList.remove('loading-state');
+        if (p) {
+          p.style.opacity = '0';
+          p.style.pointerEvents = 'none';
+          setTimeout(function () { p.style.display = 'none'; }, 200);
+        }
+      }, 1000);
+    })();
+  </script>
 
   <!-- Floating Header Navigation (Section 5) -->
   <header class="site-header" id="site-header">
@@ -1871,6 +1909,6 @@
     </div>
   </div>
 
-  <script src="script.js?v=20261104_webp_v1" defer></script>
+  <script src="script.js?v=20261104_fastload_v3" defer></script>
 </body>
 </html>
