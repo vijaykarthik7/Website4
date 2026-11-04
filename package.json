@@ -1,0 +1,12 @@
+{
+  "name": "riyadvi-website-redesign",
+  "version": "1.0.0",
+  "description": "Riyadvi Software Technologies - Premium 3D Digital Experience",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "author": "Riyadvi Software Technologies Pvt. Ltd.",
+  "license": "ISC"
+}
