@@ -64,18 +64,39 @@
     }
     pAnimId = requestAnimationFrame(renderPreloaderParticles);
 
+    function dismissPreloader() {
+      if (!document.body.classList.contains('loading-state')) return;
+      preloadProgress = 100;
+      if (preloaderBar) preloaderBar.style.width = '100%';
+      clearInterval(preloadInterval);
+      document.body.classList.remove('loading-state');
+      if (preloader) {
+        preloader.style.opacity = '0';
+        preloader.style.pointerEvents = 'none';
+        setTimeout(() => {
+          preloader.style.display = 'none';
+          if (pAnimId) cancelAnimationFrame(pAnimId);
+        }, 400);
+      }
+    }
+
     const preloadInterval = setInterval(() => {
-      preloadProgress += 6;
+      preloadProgress += 10;
       if (preloaderBar) preloaderBar.style.width = `${Math.min(100, preloadProgress)}%`;
 
       if (preloadProgress >= 100) {
-        clearInterval(preloadInterval);
-        setTimeout(() => {
-          document.body.classList.remove('loading-state');
-          cancelAnimationFrame(pAnimId);
-        }, 350);
+        dismissPreloader();
       }
-    }, 45);
+    }, 35);
+
+    // Instant completion on window load or document ready
+    if (document.readyState === 'complete') {
+      setTimeout(dismissPreloader, 350);
+    } else {
+      window.addEventListener('load', () => setTimeout(dismissPreloader, 250), { once: true });
+    }
+    // Hard ceiling safety timeout: max 1.2s ensures user never waits
+    setTimeout(dismissPreloader, 1200);
   }
 
   // ==========================================================================
@@ -237,10 +258,15 @@
         e.preventDefault();
         const awardsEl = document.getElementById('awards');
         if (awardsEl) {
-          if (lenisInstance) {
-            lenisInstance.scrollTo(awardsEl, { duration: 1.4, offset: -20 });
+          const targetY = awardsEl.getBoundingClientRect().top + window.scrollY - 20;
+          if (lenisInstance && typeof lenisInstance.scrollTo === 'function') {
+            try {
+              lenisInstance.scrollTo(targetY, { duration: 1.2 });
+            } catch (err) {
+              window.scrollTo({ top: targetY, behavior: 'smooth' });
+            }
           } else {
-            awardsEl.scrollIntoView({ behavior: 'smooth' });
+            window.scrollTo({ top: targetY, behavior: 'smooth' });
           }
         }
       });
@@ -324,9 +350,9 @@
             initialFrameRendered = true;
             resizeFallCanvas();
             renderFallFrame();
-          } else {
+          } else if (isFallVisible) {
             const curIdx = Math.round(currentFrameFloat);
-            if (Math.abs(curIdx - idx) <= 1) {
+            if (Math.abs(curIdx - idx) <= 3) {
               renderFallFrame();
             }
           }
@@ -343,59 +369,50 @@
     }
 
     async function preloadFallSequence() {
-      // 1. Immediately load initial frame
+      // 1. Immediately load Frame 0 and paint instantly
       await loadFrame(0);
+      if (!initialFrameRendered) {
+        initialFrameRendered = true;
+        resizeFallCanvas();
+        renderFallFrame();
+      }
 
-      // 2. CRITICAL PRIORITY: Eagerly preload first 40 frames sequentially/parallel
-      // These are the exact frames for the Hero section so scrolling is silky smooth immediately!
-      const heroBatch1 = [];
-      for (let i = 1; i <= 20; i++) heroBatch1.push(i);
-      await Promise.all(heroBatch1.map(loadFrame));
+      // 2. Preload early Hero keyframes in small unblocking batches
+      const earlyKeyframes = [3, 6, 9, 12, 15, 18, 22, 26, 30];
+      for (let i = 0; i < earlyKeyframes.length; i += 3) {
+        const batch = earlyKeyframes.slice(i, i + 3);
+        await Promise.all(batch.map(loadFrame));
+      }
 
-      const heroBatch2 = [];
-      for (let i = 21; i <= 40; i++) heroBatch2.push(i);
-      await Promise.all(heroBatch2.map(loadFrame));
-
-      // 3. Keyframes across remainder of the 191 frames (every 4 frames)
+      // 3. Staggered background loading of remainder keyframes
       const keyframes = [];
-      for (let i = 44; i < TOTAL_FRAMES; i += 4) {
+      for (let i = 34; i < TOTAL_FRAMES; i += 6) {
         keyframes.push(i);
       }
       if (!keyframes.includes(TOTAL_FRAMES - 1)) {
         keyframes.push(TOTAL_FRAMES - 1);
       }
 
-      for (let i = 0; i < keyframes.length; i += 8) {
-        const batch = keyframes.slice(i, i + 8);
-        await Promise.all(batch.map((idx) => loadFrame(idx)));
-      }
-
-      // 4. Staggered background loading of intermediate remaining frames
-      const remaining = [];
-      for (let i = 41; i < TOTAL_FRAMES; i++) {
-        if (!fallLoaded[i]) remaining.push(i);
-      }
-
-      let rIdx = 0;
+      let kIdx = 0;
       function loadNextBatch() {
-        if (rIdx >= remaining.length) return;
-        const batch = remaining.slice(rIdx, rIdx + 8);
-        rIdx += 8;
-        Promise.all(batch.map((idx) => loadFrame(idx))).then(() => {
-          if (rIdx < remaining.length) {
+        if (kIdx >= keyframes.length) return;
+        const batch = keyframes.slice(kIdx, kIdx + 3);
+        kIdx += 3;
+        Promise.all(batch.map(loadFrame)).then(() => {
+          if (kIdx < keyframes.length) {
             if ('requestIdleCallback' in window) {
-              requestIdleCallback(loadNextBatch, { timeout: 150 });
+              requestIdleCallback(loadNextBatch, { timeout: 250 });
             } else {
-              setTimeout(loadNextBatch, 30);
+              setTimeout(loadNextBatch, 80);
             }
           }
         });
       }
 
       if ('requestIdleCallback' in window) {
-        requestIdleCallback(loadNextBatch, { timeout: 200 });
+        requestIdleCallback(loadNextBatch, { timeout: 300 });
       } else {
-        setTimeout(loadNextBatch, 50);
+        setTimeout(loadNextBatch, 100);
       }
     }
 
@@ -429,10 +446,11 @@
       }
     }
 
-    function updateFallProgress() {
-      const scrollY = window.scrollY;
+    function updateFallProgress(e) {
+      const scrollY = (e && typeof e.scroll === 'number') ? e.scroll : (window.lenis && typeof window.lenis.scroll === 'number' ? window.lenis.scroll : window.scrollY);
       const heroHeight = heroSection.offsetHeight || window.innerHeight;
-      const aboutBottom = aboutSection.offsetTop + aboutSection.offsetHeight;
+      const aRect = aboutSection.getBoundingClientRect();
+      const aboutBottom = aRect.bottom + scrollY;
       const winH = window.innerHeight;
 
       // Range for Sections 1, 2, and 3:
@@ -495,6 +513,7 @@
 
   // ==========================================================================
   // 4C. LIFT SCROLL-DOWN CANVAS SCRUBBER (192 FRAMES ACROSS SECTIONS 4 TO 6)
+  // (04 - SERVICES, 05 - GUARDIAN, 06 - PORTFOLIO)
   // ==========================================================================
   const liftCanvas = document.getElementById('lift-canvas');
   const liftViewport = document.getElementById('lift-bg-viewport');
@@ -507,18 +526,21 @@
     const TOTAL_LIFT_FRAMES = 192;
     const liftFrames = new Array(TOTAL_LIFT_FRAMES);
     const liftLoaded = new Array(TOTAL_LIFT_FRAMES).fill(false);
+    const liftLoadingPromises = new Map();
     let liftTargetFrameFloat = 0;
     let liftCurrentFrameFloat = 0;
     let isLiftVisible = false;
     let initialLiftRendered = false;
+    let hasDrawnLiftVisible = false;
 
     function getLiftFramePath(idx) {
       const padded = String(idx + 1).padStart(3, '0');
       return `lift/ezgif-frame-${padded}.png`;
     }
 
-    let lW = 0;
-    let lH = 0;
+    let lW = (liftCanvas.width = window.innerWidth);
+    let lH = (liftCanvas.height = window.innerHeight);
+
     function resizeLiftCanvas() {
       lW = liftCanvas.width = window.innerWidth;
       lH = liftCanvas.height = window.innerHeight;
@@ -536,16 +558,26 @@
       const oX = (lW - dW) / 2;
       const oY = (lH - dH) / 2;
       liftCtx.drawImage(img, oX, oY, dW, dH);
+      hasDrawnLiftVisible = true;
     }
 
     function renderLiftFrame() {
       const desiredIdx = Math.max(0, Math.min(TOTAL_LIFT_FRAMES - 1, Math.round(liftCurrentFrameFloat)));
-      let frameToDraw = null;
 
+      // Speculative neighbor prefetch around current scrubber index
+      if (!liftLoaded[desiredIdx]) {
+        loadLiftFrame(desiredIdx);
+      }
+      for (let s = 1; s <= 4; s++) {
+        if (desiredIdx + s < TOTAL_LIFT_FRAMES && !liftLoaded[desiredIdx + s]) loadLiftFrame(desiredIdx + s);
+        if (desiredIdx - s >= 0 && !liftLoaded[desiredIdx - s]) loadLiftFrame(desiredIdx - s);
+      }
+
+      let frameToDraw = null;
       if (liftLoaded[desiredIdx] && liftFrames[desiredIdx]) {
         frameToDraw = liftFrames[desiredIdx];
       } else {
-        // Nearest-neighbor fallback search
+        // Nearest-neighbor fallback search so canvas is NEVER blank
         for (let d = 1; d < TOTAL_LIFT_FRAMES; d++) {
           const prev = desiredIdx - d;
           const next = desiredIdx + d;
@@ -566,90 +598,108 @@
     }
 
     function loadLiftFrame(idx) {
+      if (idx < 0 || idx >= TOTAL_LIFT_FRAMES) return Promise.resolve(null);
       if (liftFrames[idx]) return Promise.resolve(liftFrames[idx]);
-      return new Promise((resolve) => {
+      if (liftLoadingPromises.has(idx)) return liftLoadingPromises.get(idx);
+
+      const p = new Promise((resolve) => {
         const img = new Image();
         img.src = getLiftFramePath(idx);
         img.onload = () => {
           liftFrames[idx] = img;
           liftLoaded[idx] = true;
-          if (!initialLiftRendered) {
+          liftLoadingPromises.delete(idx);
+          if (isLiftVisible || !initialLiftRendered) {
             initialLiftRendered = true;
-            resizeLiftCanvas();
             renderLiftFrame();
+          } else {
+            const curIdx = Math.round(liftCurrentFrameFloat);
+            if (Math.abs(curIdx - idx) <= 3) {
+              renderLiftFrame();
+            }
           }
           resolve(img);
         };
-        img.onerror = () => resolve(null);
+        img.onerror = () => {
+          liftLoadingPromises.delete(idx);
+          resolve(null);
+        };
       });
+
+      liftLoadingPromises.set(idx, p);
+      return p;
     }
 
     async function preloadLiftSequence() {
-      // 1. Immediate first frame
+      // 1. Immediate priority: First frame painted instantly so canvas is NEVER empty
       await loadLiftFrame(0);
+      if (!initialLiftRendered) {
+        initialLiftRendered = true;
+        resizeLiftCanvas();
+        renderLiftFrame();
+      }
 
-      // 2. Primary keyframes (every 4 frames across 192 frames)
+      // 2. Early keyframes in gentle unblocking chunks
+      const earlyKeyframes = [4, 8, 12, 16, 20, 24];
+      for (let i = 0; i < earlyKeyframes.length; i += 3) {
+        const batch = earlyKeyframes.slice(i, i + 3);
+        await Promise.all(batch.map(loadLiftFrame));
+      }
+
+      // 3. Staggered background loading of intermediate keyframes
       const keyframes = [];
-      for (let i = 0; i < TOTAL_LIFT_FRAMES; i += 4) {
-        if (i !== 0) keyframes.push(i);
+      for (let i = 28; i < TOTAL_LIFT_FRAMES; i += 6) {
+        keyframes.push(i);
       }
-      if (!keyframes.includes(TOTAL_LIFT_FRAMES - 1)) {
-        keyframes.push(TOTAL_LIFT_FRAMES - 1);
-      }
+      if (!keyframes.includes(TOTAL_LIFT_FRAMES - 1)) keyframes.push(TOTAL_LIFT_FRAMES - 1);
 
-      for (let i = 0; i < keyframes.length; i += 8) {
-        const batch = keyframes.slice(i, i + 8);
-        await Promise.all(batch.map((idx) => loadLiftFrame(idx)));
-      }
-
-      // 3. Staggered background loading of intermediate frames
-      const remaining = [];
-      for (let i = 0; i < TOTAL_LIFT_FRAMES; i++) {
-        if (!liftLoaded[i]) remaining.push(i);
-      }
-
-      let rIdx = 0;
-      function loadNextBatch() {
-        if (rIdx >= remaining.length) return;
-        const batch = remaining.slice(rIdx, rIdx + 6);
-        rIdx += 6;
-        Promise.all(batch.map((idx) => loadLiftFrame(idx))).then(() => {
-          if (rIdx < remaining.length) {
+      let kIdx = 0;
+      function loadNextLiftBatch() {
+        if (kIdx >= keyframes.length) return;
+        const batch = keyframes.slice(kIdx, kIdx + 3);
+        kIdx += 3;
+        Promise.all(batch.map(loadLiftFrame)).then(() => {
+          if (kIdx < keyframes.length) {
             if ('requestIdleCallback' in window) {
-              requestIdleCallback(loadNextBatch, { timeout: 200 });
+              requestIdleCallback(loadNextLiftBatch, { timeout: 250 });
             } else {
-              setTimeout(loadNextBatch, 40);
+              setTimeout(loadNextLiftBatch, 70);
             }
           }
         });
       }
 
       if ('requestIdleCallback' in window) {
-        requestIdleCallback(loadNextBatch, { timeout: 300 });
+        requestIdleCallback(loadNextLiftBatch, { timeout: 350 });
       } else {
-        setTimeout(loadNextBatch, 80);
+        setTimeout(loadNextLiftBatch, 100);
       }
     }
 
-    function updateLiftProgress() {
-      const scrollY = window.scrollY;
+    function updateLiftProgress(e) {
+      const scrollY = (e && typeof e.scroll === 'number') ? e.scroll : (window.lenis && typeof window.lenis.scroll === 'number' ? window.lenis.scroll : window.scrollY);
       const winH = window.innerHeight;
-      
-      const servicesTop = servicesSection.offsetTop;
-      const portfolioBottom = portfolioSection.offsetTop + portfolioSection.offsetHeight;
-      
+
+      const sRect = servicesSection.getBoundingClientRect();
+      const pRect = portfolioSection.getBoundingClientRect();
+      const servicesTop = sRect.top + scrollY;
+      const portfolioBottom = pRect.bottom + scrollY;
+
       // Range where Lift is active:
       // Fade in starts when Section 4 (Services) is coming into view
       const fadeInStart = Math.max(0, servicesTop - winH);
       const fadeInEnd = servicesTop;
       // Fade out starts when reaching the bottom of Section 6 (Portfolio)
-      const fadeOutStart = portfolioBottom - winH;
+      const fadeOutStart = Math.max(servicesTop, portfolioBottom - winH);
       const fadeOutEnd = portfolioBottom;
+
+      const wasVisible = isLiftVisible;
 
       if (scrollY < fadeInStart) {
         liftViewport.style.opacity = '0';
         liftViewport.style.visibility = 'hidden';
         isLiftVisible = false;
+        hasDrawnLiftVisible = false;
       } else if (scrollY >= fadeInStart && scrollY < fadeInEnd) {
         const ratio = (scrollY - fadeInStart) / (fadeInEnd - fadeInStart);
         liftViewport.style.opacity = String(Math.max(0, Math.min(1, ratio)));
@@ -668,19 +718,27 @@
         liftViewport.style.opacity = '0';
         liftViewport.style.visibility = 'hidden';
         isLiftVisible = false;
+        hasDrawnLiftVisible = false;
       }
 
       // Compute frame progression across the 3 sections (Services, Guardian, Portfolio)
       const scrubRange = Math.max(1, fadeOutStart - servicesTop);
       const progress = Math.min(1, Math.max(0, (scrollY - servicesTop) / scrubRange));
       liftTargetFrameFloat = progress * (TOTAL_LIFT_FRAMES - 1);
+
+      // Render immediately upon entering visibility or if canvas hasn't drawn
+      if (isLiftVisible && (!wasVisible || !hasDrawnLiftVisible)) {
+        renderLiftFrame();
+      }
     }
 
     function liftAnimLoop() {
       if (isLiftVisible) {
         const diff = liftTargetFrameFloat - liftCurrentFrameFloat;
         if (Math.abs(diff) > 0.005) {
-          liftCurrentFrameFloat += diff * 0.16;
+          liftCurrentFrameFloat += diff * 0.2;
+          renderLiftFrame();
+        } else if (!hasDrawnLiftVisible) {
           renderLiftFrame();
         }
       }
@@ -818,61 +876,61 @@
     }
 
     async function preloadBuildSequence() {
-      // 1. Immediate priority: First 16 frames for instant presentation at Section 7 entry
-      const initialBatch = [];
-      for (let i = 0; i <= 15; i++) initialBatch.push(i);
-      await Promise.all(initialBatch.map(loadBuildFrame));
-      renderBuildFrame();
+      // 1. Immediate priority: First frame painted instantly
+      await loadBuildFrame(0);
+      if (!initialBuildRendered) {
+        initialBuildRendered = true;
+        resizeBuildCanvas();
+        renderBuildFrame();
+      }
 
-      // 2. Priority keyframes across 200 frames (every 4 frames)
+      // 2. Early keyframes in gentle unblocking chunks
+      const earlyKeyframes = [4, 8, 12, 16, 20, 24];
+      for (let i = 0; i < earlyKeyframes.length; i += 3) {
+        const batch = earlyKeyframes.slice(i, i + 3);
+        await Promise.all(batch.map(loadBuildFrame));
+      }
+
+      // 3. Staggered background loading of intermediate keyframes
       const keyframes = [];
-      for (let i = 16; i < TOTAL_BUILD_FRAMES; i += 4) {
+      for (let i = 28; i < TOTAL_BUILD_FRAMES; i += 6) {
         keyframes.push(i);
       }
       if (!keyframes.includes(TOTAL_BUILD_FRAMES - 1)) {
         keyframes.push(TOTAL_BUILD_FRAMES - 1);
       }
 
-      for (let i = 0; i < keyframes.length; i += 8) {
-        const batch = keyframes.slice(i, i + 8);
-        await Promise.all(batch.map((idx) => loadBuildFrame(idx)));
-      }
-
-      // 3. Staggered background loading of intermediate frames
-      const remaining = [];
-      for (let i = 0; i < TOTAL_BUILD_FRAMES; i++) {
-        if (!buildLoaded[i]) remaining.push(i);
-      }
-
-      let rIdx = 0;
+      let kIdx = 0;
       function loadNextBatch() {
-        if (rIdx >= remaining.length) return;
-        const batch = remaining.slice(rIdx, rIdx + 8);
-        rIdx += 8;
-        Promise.all(batch.map((idx) => loadBuildFrame(idx))).then(() => {
-          if (rIdx < remaining.length) {
+        if (kIdx >= keyframes.length) return;
+        const batch = keyframes.slice(kIdx, kIdx + 3);
+        kIdx += 3;
+        Promise.all(batch.map(loadBuildFrame)).then(() => {
+          if (kIdx < keyframes.length) {
             if ('requestIdleCallback' in window) {
-              requestIdleCallback(loadNextBatch, { timeout: 200 });
+              requestIdleCallback(loadNextBatch, { timeout: 250 });
             } else {
-              setTimeout(loadNextBatch, 40);
+              setTimeout(loadNextBatch, 70);
             }
           }
         });
       }
 
       if ('requestIdleCallback' in window) {
-        requestIdleCallback(loadNextBatch, { timeout: 300 });
+        requestIdleCallback(loadNextBatch, { timeout: 350 });
       } else {
-        setTimeout(loadNextBatch, 80);
+        setTimeout(loadNextBatch, 100);
       }
     }
 
-    function updateBuildProgress() {
-      const scrollY = window.scrollY;
+    function updateBuildProgress(e) {
+      const scrollY = (e && typeof e.scroll === 'number') ? e.scroll : (window.lenis && typeof window.lenis.scroll === 'number' ? window.lenis.scroll : window.scrollY);
       const winH = window.innerHeight;
 
-      const resultsTop = resultsSection.offsetTop;
-      const storyBottom = storySection.offsetTop + storySection.offsetHeight;
+      const rRect = resultsSection.getBoundingClientRect();
+      const sRect = storySection.getBoundingClientRect();
+      const resultsTop = rRect.top + scrollY;
+      const storyBottom = sRect.bottom + scrollY;
 
       // Range where Build animation is active:
       // Fade in starts when Section 7 (Results) is coming into view
@@ -1065,61 +1123,61 @@
     }
 
     async function preloadHandSequence() {
-      // 1. Immediate priority: First 16 frames for instant presentation at Section 10 entry
-      const initialBatch = [];
-      for (let i = 0; i <= 15; i++) initialBatch.push(i);
-      await Promise.all(initialBatch.map(loadHandFrame));
-      renderHandFrame();
+      // 1. Immediate priority: First frame painted instantly so canvas is never blank
+      await loadHandFrame(0);
+      if (!initialHandRendered) {
+        initialHandRendered = true;
+        resizeHandCanvas();
+        renderHandFrame();
+      }
 
-      // 2. Priority keyframes across 192 frames (every 4 frames)
+      // 2. Early keyframes in gentle unblocking chunks
+      const earlyKeyframes = [4, 8, 12, 16, 20, 24];
+      for (let i = 0; i < earlyKeyframes.length; i += 3) {
+        const batch = earlyKeyframes.slice(i, i + 3);
+        await Promise.all(batch.map(loadHandFrame));
+      }
+
+      // 3. Staggered background loading of intermediate keyframes
       const keyframes = [];
-      for (let i = 16; i < TOTAL_HAND_FRAMES; i += 4) {
+      for (let i = 28; i < TOTAL_HAND_FRAMES; i += 6) {
         keyframes.push(i);
       }
       if (!keyframes.includes(TOTAL_HAND_FRAMES - 1)) {
         keyframes.push(TOTAL_HAND_FRAMES - 1);
       }
 
-      for (let i = 0; i < keyframes.length; i += 8) {
-        const batch = keyframes.slice(i, i + 8);
-        await Promise.all(batch.map((idx) => loadHandFrame(idx)));
-      }
-
-      // 3. Staggered background loading of intermediate frames
-      const remaining = [];
-      for (let i = 0; i < TOTAL_HAND_FRAMES; i++) {
-        if (!handLoaded[i]) remaining.push(i);
-      }
-
-      let rIdx = 0;
+      let kIdx = 0;
       function loadNextBatch() {
-        if (rIdx >= remaining.length) return;
-        const batch = remaining.slice(rIdx, rIdx + 8);
-        rIdx += 8;
-        Promise.all(batch.map((idx) => loadHandFrame(idx))).then(() => {
-          if (rIdx < remaining.length) {
+        if (kIdx >= keyframes.length) return;
+        const batch = keyframes.slice(kIdx, kIdx + 3);
+        kIdx += 3;
+        Promise.all(batch.map(loadHandFrame)).then(() => {
+          if (kIdx < keyframes.length) {
             if ('requestIdleCallback' in window) {
-              requestIdleCallback(loadNextBatch, { timeout: 200 });
+              requestIdleCallback(loadNextBatch, { timeout: 250 });
             } else {
-              setTimeout(loadNextBatch, 40);
+              setTimeout(loadNextBatch, 70);
             }
           }
         });
       }
 
       if ('requestIdleCallback' in window) {
-        requestIdleCallback(loadNextBatch, { timeout: 300 });
+        requestIdleCallback(loadNextBatch, { timeout: 350 });
       } else {
-        setTimeout(loadNextBatch, 80);
+        setTimeout(loadNextBatch, 100);
       }
     }
 
-    function updateHandProgress() {
-      const scrollY = window.scrollY;
+    function updateHandProgress(e) {
+      const scrollY = (e && typeof e.scroll === 'number') ? e.scroll : (window.lenis && typeof window.lenis.scroll === 'number' ? window.lenis.scroll : window.scrollY);
       const winH = window.innerHeight;
 
-      const techTop = techSection.offsetTop;
-      const testiBottom = testimonialsSection.offsetTop + testimonialsSection.offsetHeight;
+      const tRect = techSection.getBoundingClientRect();
+      const testRect = testimonialsSection.getBoundingClientRect();
+      const techTop = tRect.top + scrollY;
+      const testiBottom = testRect.bottom + scrollY;
 
       // Range where Hand animation is active:
       // Fade in starts when Section 10 (Tech Ecosystem) is coming into view
@@ -1312,43 +1370,41 @@
     }
 
     async function preloadRadioSequence() {
-      // 1. Immediate priority: First 12 frames for instant presentation at Section 13 entry
-      const initialBatch = [];
-      for (let i = 0; i <= 11; i++) initialBatch.push(i);
-      await Promise.all(initialBatch.map(loadRadioFrame));
-      renderRadioFrame();
+      // 1. Immediate priority: First frame painted instantly so canvas is never blank
+      await loadRadioFrame(0);
+      if (!initialRadioRendered) {
+        initialRadioRendered = true;
+        resizeRadioCanvas();
+        renderRadioFrame();
+      }
 
-      // 2. Priority keyframes across 200 frames (every 6 frames)
+      // 2. Early keyframes in gentle unblocking chunks
+      const earlyKeyframes = [4, 8, 12, 16, 20, 24];
+      for (let i = 0; i < earlyKeyframes.length; i += 3) {
+        const batch = earlyKeyframes.slice(i, i + 3);
+        await Promise.all(batch.map(loadRadioFrame));
+      }
+
+      // 3. Staggered background loading of intermediate keyframes
       const keyframes = [];
-      for (let i = 12; i < TOTAL_RADIO_FRAMES; i += 6) {
+      for (let i = 28; i < TOTAL_RADIO_FRAMES; i += 6) {
         keyframes.push(i);
       }
       if (!keyframes.includes(TOTAL_RADIO_FRAMES - 1)) {
         keyframes.push(TOTAL_RADIO_FRAMES - 1);
       }
 
-      for (let i = 0; i < keyframes.length; i += 4) {
-        const batch = keyframes.slice(i, i + 4);
-        await Promise.all(batch.map((idx) => loadRadioFrame(idx)));
-      }
-
-      // 3. Staggered background loading of intermediate frames
-      const remaining = [];
-      for (let i = 0; i < TOTAL_RADIO_FRAMES; i++) {
-        if (!radioLoaded[i]) remaining.push(i);
-      }
-
-      let rIdx = 0;
+      let kIdx = 0;
       function loadNextBatch() {
-        if (rIdx >= remaining.length) return;
-        const batch = remaining.slice(rIdx, rIdx + 6);
-        rIdx += 6;
-        Promise.all(batch.map((idx) => loadRadioFrame(idx))).then(() => {
-          if (rIdx < remaining.length) {
+        if (kIdx >= keyframes.length) return;
+        const batch = keyframes.slice(kIdx, kIdx + 3);
+        kIdx += 3;
+        Promise.all(batch.map(loadRadioFrame)).then(() => {
+          if (kIdx < keyframes.length) {
             if ('requestIdleCallback' in window) {
               requestIdleCallback(loadNextBatch, { timeout: 250 });
             } else {
-              setTimeout(loadNextBatch, 50);
+              setTimeout(loadNextBatch, 70);
             }
           }
         });
@@ -1361,12 +1417,14 @@
       }
     }
 
-    function updateRadioProgress() {
-      const scrollY = window.scrollY;
+    function updateRadioProgress(e) {
+      const scrollY = (e && typeof e.scroll === 'number') ? e.scroll : (window.lenis && typeof window.lenis.scroll === 'number' ? window.lenis.scroll : window.scrollY);
       const winH = window.innerHeight;
 
-      const estimatorTop = estimatorSection.offsetTop;
-      const footerBottom = footerSection.offsetTop + footerSection.offsetHeight;
+      const estRect = estimatorSection.getBoundingClientRect();
+      const footRect = footerSection.getBoundingClientRect();
+      const estimatorTop = estRect.top + scrollY;
+      const footerBottom = footRect.bottom + scrollY;
 
       // Range where Radio animation is active:
       // Fade in starts when Section 13 (Estimator) is coming into view
