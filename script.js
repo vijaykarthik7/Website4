@@ -193,37 +193,47 @@
   // 4. LENIS BUTTERY SMOOTH MOMENTUM SCROLL ENGINE
   // ==========================================================================
   let lenisInstance = null;
-  if (typeof Lenis !== 'undefined') {
-    lenisInstance = new Lenis({
-      duration: 1.2,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      orientation: 'vertical',
-      gestureOrientation: 'vertical',
-      smoothWheel: true,
-      wheelMultiplier: 1.0
-    });
-    window.lenis = lenisInstance;
+  function initLenisEngine() {
+    if (lenisInstance) return;
+    if (typeof Lenis !== 'undefined') {
+      lenisInstance = new Lenis({
+        duration: 1.2,
+        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        orientation: 'vertical',
+        gestureOrientation: 'vertical',
+        smoothWheel: true,
+        wheelMultiplier: 1.0
+      });
+      window.lenis = lenisInstance;
 
-    function lenisRaf(time) {
-      lenisInstance.raf(time);
+      function lenisRaf(time) {
+        lenisInstance.raf(time);
+        requestAnimationFrame(lenisRaf);
+      }
       requestAnimationFrame(lenisRaf);
+    } else {
+      setTimeout(initLenisEngine, 150);
     }
-    requestAnimationFrame(lenisRaf);
+  }
+  initLenisEngine();
 
-    // Smooth Anchor Navigation
-    document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
-      anchor.addEventListener('click', (e) => {
-        const targetId = anchor.getAttribute('href');
-        if (targetId && targetId !== '#') {
-          const targetEl = document.querySelector(targetId);
-          if (targetEl) {
-            e.preventDefault();
+  // Smooth Anchor Navigation (works natively or with Lenis)
+  document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
+    anchor.addEventListener('click', (e) => {
+      const targetId = anchor.getAttribute('href');
+      if (targetId && targetId !== '#') {
+        const targetEl = document.querySelector(targetId);
+        if (targetEl) {
+          e.preventDefault();
+          if (lenisInstance) {
             lenisInstance.scrollTo(targetEl, { duration: 1.4, offset: -40 });
+          } else {
+            targetEl.scrollIntoView({ behavior: 'smooth' });
           }
         }
-      });
+      }
     });
-  }
+  });
 
   // ==========================================================================
   // 4A. HIGH-PERFORMANCE GLOBAL SEQUENCE CONTROLLER & PRIORITY QUEUE
@@ -1223,8 +1233,13 @@
   // ==========================================================================
   // 6. HERO 3D EXPERIENCE: THREE.JS METALLIC RIYADVI EMBLEM (Sections 7 & 8)
   // ==========================================================================
-  const heroCanvas = document.getElementById('hero-webgl-canvas');
-  if (heroCanvas && typeof THREE !== 'undefined') {
+  function initHero3DScene() {
+    const heroCanvas = document.getElementById('hero-webgl-canvas');
+    if (!heroCanvas) return;
+    if (typeof THREE === 'undefined') {
+      setTimeout(initHero3DScene, 200);
+      return;
+    }
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(
       45,
@@ -1428,6 +1443,7 @@
     }
     animateHero3D();
   }
+  initHero3DScene();
 
   // ==========================================================================
   // 7. ANIMATED STATISTIC COUNTERS (Section 9)
@@ -1739,8 +1755,13 @@
   // ==========================================================================
   // 9. RIYADVI GUARDIAN 3D SHIELD CANVAS (Sections 14 & 15)
   // ==========================================================================
-  const guardianCanvas = document.getElementById('guardian-3d-canvas');
-  if (guardianCanvas && typeof THREE !== 'undefined') {
+  function initGuardian3DScene() {
+    const guardianCanvas = document.getElementById('guardian-3d-canvas');
+    if (!guardianCanvas) return;
+    if (typeof THREE === 'undefined') {
+      setTimeout(initGuardian3DScene, 200);
+      return;
+    }
     const gScene = new THREE.Scene();
     const gCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
     gCamera.position.set(0, 0, 11);
@@ -1851,6 +1872,7 @@
     }
     animateGuardian();
   }
+  initGuardian3DScene();
 
   // Telemetry Sequence Steps highlight animation
   const chips = [
