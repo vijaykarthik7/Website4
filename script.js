@@ -65,7 +65,6 @@
     pAnimId = requestAnimationFrame(renderPreloaderParticles);
 
     function dismissPreloader() {
-      if (!document.body.classList.contains('loading-state')) return;
       preloadProgress = 100;
       if (preloaderBar) preloaderBar.style.width = '100%';
       clearInterval(preloadInterval);
@@ -76,7 +75,7 @@
         setTimeout(() => {
           preloader.style.display = 'none';
           if (pAnimId) cancelAnimationFrame(pAnimId);
-        }, 400);
+        }, 300);
       }
     }
 

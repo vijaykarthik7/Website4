@@ -77,7 +77,7 @@
   }
   </script>
 </head>
-<body class="loading-state">
+<body>
 
   <!-- Desktop Custom Magnetic Gold Cursor (Section 34) -->
   <div class="custom-cursor" id="custom-cursor" aria-hidden="true">
@@ -90,7 +90,7 @@
   <!-- Ambient Golden Energy Line Canvas (Section 33) -->
   <canvas id="energy-line-canvas" class="energy-canvas" aria-hidden="true"></canvas>
 
-  <!-- Cinematic Preloader (1-2s Gold Particle Sequence - Section 4) -->
+  <!-- Cinematic Preloader (0.5s CSS Particle Sequence - Section 4) -->
   <div id="preloader" class="preloader-overlay" role="status" aria-live="polite">
     <canvas id="preloader-canvas" class="preloader-particles-canvas"></canvas>
     <div class="preloader-center">
@@ -106,46 +106,6 @@
       </div>
     </div>
   </div>
-  <script>
-    (function () {
-      var p = document.getElementById('preloader');
-      var bar = document.getElementById('preloader-bar-fill');
-      var progress = 0;
-      var timer = setInterval(function () {
-        progress += 12;
-        if (bar) bar.style.width = Math.min(100, progress) + '%';
-        if (progress >= 100) {
-          clearInterval(timer);
-          document.body.classList.remove('loading-state');
-          if (p) {
-            p.style.opacity = '0';
-            p.style.pointerEvents = 'none';
-            setTimeout(function () { p.style.display = 'none'; }, 400);
-          }
-        }
-      }, 40);
-      window.addEventListener('load', function () {
-        clearInterval(timer);
-        if (bar) bar.style.width = '100%';
-        document.body.classList.remove('loading-state');
-        if (p) {
-          p.style.opacity = '0';
-          p.style.pointerEvents = 'none';
-          setTimeout(function () { p.style.display = 'none'; }, 250);
-        }
-      }, { once: true });
-      setTimeout(function () {
-        clearInterval(timer);
-        if (bar) bar.style.width = '100%';
-        document.body.classList.remove('loading-state');
-        if (p) {
-          p.style.opacity = '0';
-          p.style.pointerEvents = 'none';
-          setTimeout(function () { p.style.display = 'none'; }, 200);
-        }
-      }, 1000);
-    })();
-  </script>
 
   <!-- Floating Header Navigation (Section 5) -->
   <header class="site-header" id="site-header">

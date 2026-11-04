@@ -167,8 +167,24 @@ html.lenis body {
 }
 
 /* ==========================================================================
-   PRELOADER (1-2s Gold Particle Sequence - Section 4)
+   PRELOADER (Cinematic Splash Fade-Out - Section 4)
    ========================================================================== */
+@keyframes preloaderDismissAnim {
+  0% {
+    opacity: 1;
+    visibility: visible;
+  }
+  65% {
+    opacity: 1;
+    visibility: visible;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
 .preloader-overlay {
   position: fixed;
   top: 0;
@@ -180,7 +196,8 @@ html.lenis body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.6s var(--ease-out), visibility 0.6s ease;
+  animation: preloaderDismissAnim 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none;
 }
 
 body:not(.loading-state) .preloader-overlay {
