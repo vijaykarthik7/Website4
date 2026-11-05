@@ -1771,7 +1771,7 @@
       alpha: true,
       antialias: true
     });
-    gRenderer.setSize(440, 440);
+    gRenderer.setSize(440, 440, false);
     gRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
     // Lighting

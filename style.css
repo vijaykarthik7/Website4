@@ -58,15 +58,23 @@ html {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  position: relative;
+  box-sizing: border-box;
 }
 
 body {
   min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
   position: relative;
   background-color: var(--bg-primary);
   color: var(--text-white);
   line-height: 1.6;
   overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 /* Lenis Smooth Scrolling Engine */
@@ -152,6 +160,18 @@ html.lenis body {
   letter-spacing: 1px;
   text-transform: uppercase;
   display: none;
+}
+
+@media (pointer: coarse), (hover: none), (max-width: 900px) {
+  .custom-cursor,
+  .cursor-dot,
+  .cursor-ring,
+  .cursor-text {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
 }
 
 /* Ambient Golden Energy Line Canvas (Section 33) */
@@ -927,12 +947,6 @@ body:not(.loading-state) .preloader-overlay {
   transform: translateY(-2px);
 }
 
-background: rgba(212, 175, 55, 0.25);
-border-color: var(--gold-bright);
-color: #FFFFFF;
-transform: translateY(-2px);
-}
-
 .hero-tertiary-pill-btn {
   display: inline-flex;
   align-items: center;
@@ -1465,11 +1479,11 @@ section::after {
 
 .award-card-glow {
   position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(212, 175, 55, 0.12) 0%, transparent 60%);
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, rgba(212, 175, 55, 0.15) 0%, transparent 70%);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.4s ease;
@@ -2040,14 +2054,16 @@ section::after {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 12px;
   margin-bottom: 14px;
+  max-width: 100%;
 }
 
 .vwing-line {
-  width: 90px;
+  width: clamp(20px, 8vw, 90px);
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(244, 211, 107, 0.7));
+  flex-shrink: 1;
 }
 
 .vwing-badge-row .vwing-line:last-child {
@@ -2587,7 +2603,7 @@ section::after {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 960px) {
   .vwing-guidelines-overlay {
     display: none;
   }
@@ -2600,8 +2616,11 @@ section::after {
     scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
     gap: 12px;
-    padding: 8px 16px 20px;
-    margin: 0 -16px 36px;
+    padding: 8px 6px 20px;
+    margin: 0 0 32px 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     scrollbar-width: thin;
     scrollbar-color: rgba(212, 175, 55, 0.4) transparent;
   }
@@ -2787,7 +2806,12 @@ section::after {
 
 .shield-container {
   position: relative;
-  height: 440px;
+  width: 100%;
+  max-width: 440px;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  max-height: 85vw;
+  margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2798,11 +2822,16 @@ section::after {
   height: 100%;
   position: relative;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 #guardian-3d-canvas {
-  width: 100%;
-  height: 100%;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 1 / 1;
   display: block;
 }
 
@@ -5308,7 +5337,7 @@ section::after {
   -webkit-backdrop-filter: blur(16px) !important;
   border: 1px solid rgba(212, 175, 55, 0.25) !important;
   border-radius: 24px;
-  padding: 44px;
+  padding: clamp(20px, 4vw, 44px);
   max-width: 860px;
   margin: 0 auto;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
@@ -5499,6 +5528,8 @@ section::after {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-white);
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .address-clean {
@@ -5642,11 +5673,13 @@ section::after {
 .footer-watermark-emblem {
   position: absolute;
   top: 50%;
-  right: -3%;
+  right: 0;
   transform: translateY(-50%);
-  width: 320px;
+  width: 300px;
+  max-width: 100%;
   opacity: 0.02;
   pointer-events: none;
+  overflow: hidden;
 }
 
 .footer-watermark-emblem img {
@@ -6320,8 +6353,17 @@ section::after {
   }
 
   .assistant-modal {
-    width: calc(100vw - 32px);
-    right: -12px;
+    position: fixed;
+    bottom: 84px;
+    right: 16px;
+    left: 16px;
+    width: auto;
+    max-width: calc(100vw - 32px);
+    margin: 0 auto;
+  }
+
+  .footer-watermark-emblem {
+    display: none !important;
   }
 
   /* Responsive Timeline for Tablet/Mobile */
@@ -6366,19 +6408,68 @@ section::after {
   }
 }
 
-@media (max-width: 580px) {
+@media (max-width: 680px) {
+
+  section {
+    padding: 60px 16px;
+  }
+
+  .hero-full-section {
+    padding: 0 16px;
+  }
+
+  .hero-center-content {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .hero-headline {
+    font-size: clamp(24px, 6.5vw, 32px);
+    max-width: 100%;
+    word-break: break-word;
+  }
+
+  .hero-buttons-row {
+    flex-direction: column;
+    width: 100%;
+    max-width: 300px;
+    gap: 12px;
+    margin: 0 auto;
+  }
+
+  .hero-stream-btn,
+  .hero-secondary-pill-btn {
+    width: 100%;
+    justify-content: center;
+    box-sizing: border-box;
+    text-align: center;
+  }
 
   .awards-grid,
   .ai-future-grid,
-  .testimonials-grid {
+  .testimonials-grid,
+  .results-dashboard-grid {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
 
   .process-steps-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 
   .form-row-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .contact-form-panel {
+    padding: 24px 18px;
+  }
+
+  .estimator-wizard-box {
+    padding: 22px 14px;
+  }
+
+  .wizard-options-grid {
     grid-template-columns: 1fr;
   }
 
