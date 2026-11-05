@@ -6812,17 +6812,37 @@ section::after {
 
   /* 15 — Footer Section */
   .site-footer {
-    padding: 50px 16px 28px !important;
+    padding: 50px 16px 84px !important;
   }
 
   .footer-links-grid {
+    display: grid !important;
     grid-template-columns: 1fr 1fr !important;
-    gap: 28px 16px !important;
+    gap: 24px 16px !important;
   }
 
   .footer-col.brand-col {
     grid-column: 1 / -1 !important;
-    margin-bottom: 8px !important;
+    margin-bottom: 6px !important;
+  }
+
+  /* Capabilities fills Column 1 across both link rows */
+  .footer-col:nth-child(2) {
+    grid-column: 1 !important;
+    grid-row: 2 / span 2 !important;
+  }
+
+  /* Industries fills Column 2 in Row 2 */
+  .footer-col:nth-child(3) {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+    margin-bottom: 14px !important;
+  }
+
+  /* Company fills Column 2 in Row 3 directly below Industries (Zero empty gap) */
+  .footer-col:nth-child(4) {
+    grid-column: 2 !important;
+    grid-row: 3 !important;
   }
 
   .f-col-title {
@@ -6835,16 +6855,16 @@ section::after {
   }
 
   .f-links-list a {
-    font-size: 13.5px !important;
+    font-size: 13px !important;
     line-height: 1.4 !important;
-    padding: 4px 0 !important;
+    padding: 3px 0 !important;
     display: inline-block !important;
   }
 
   .footer-bottom-bar {
     flex-direction: column !important;
     align-items: flex-start !important;
-    gap: 14px !important;
+    gap: 12px !important;
     padding-top: 20px !important;
   }
 
@@ -6883,14 +6903,17 @@ section::after {
     font-size: 23px !important;
   }
 
-  .footer-links-grid {
-    grid-template-columns: 1fr !important;
-    gap: 22px !important;
-  }
-
   .flow-metrics-col {
     grid-template-columns: 1fr !important;
     gap: 6px !important;
+  }
+
+  .footer-links-grid {
+    gap: 20px 12px !important;
+  }
+
+  .f-links-list a {
+    font-size: 12.5px !important;
   }
 }
 
