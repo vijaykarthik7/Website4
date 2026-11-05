@@ -29,7 +29,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&family=Syne:wght@600;700;800;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=20261105_resp_v6">
+  <link rel="stylesheet" href="style.css?v=20261105_anim_v7">
 
   <!-- Structured Schema Markup (JSON-LD) -->
   <script type="application/ld+json">
@@ -1863,13 +1863,11 @@
     </div>
   </div>
 
-  <!-- High-Performance Core Interactive Engine (Executes immediately without blocking) -->
-  <script src="script.js?v=20261105_resp_v6"></script>
-
-  <!-- Non-blocking background 3D WebGL and animation modules -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" async></script>
-  <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.20/dist/lenis.min.js" async></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" async></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" async></script>
+  <!-- High-Performance Core Interactive Engine & 3D WebGL modules (Ordered execution before DOMContentLoaded) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.20/dist/lenis.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+  <script src="script.js?v=20261105_anim_v7" defer></script>
 </body>
 </html>

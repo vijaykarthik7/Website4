@@ -193,6 +193,17 @@
   // 4. LENIS BUTTERY SMOOTH MOMENTUM SCROLL ENGINE
   // ==========================================================================
   let lenisInstance = null;
+  const registeredScrollCallbacks = [];
+
+  function registerScrollUpdate(fn) {
+    if (typeof fn !== 'function') return;
+    registeredScrollCallbacks.push(fn);
+    if (lenisInstance && typeof lenisInstance.on === 'function') {
+      lenisInstance.on('scroll', fn);
+    }
+    window.addEventListener('scroll', fn, { passive: true });
+  }
+
   function initLenisEngine() {
     if (lenisInstance) return;
     if (typeof Lenis !== 'undefined') {
@@ -202,9 +213,19 @@
         orientation: 'vertical',
         gestureOrientation: 'vertical',
         smoothWheel: true,
-        wheelMultiplier: 1.0
+        wheelMultiplier: 1.0,
+        touchMultiplier: 1.5
       });
       window.lenis = lenisInstance;
+
+      // Connect all registered animation update callbacks to lenis
+      registeredScrollCallbacks.forEach((fn) => {
+        lenisInstance.on('scroll', fn);
+      });
+
+      if (typeof ScrollTrigger !== 'undefined') {
+        lenisInstance.on('scroll', () => ScrollTrigger.update());
+      }
 
       function lenisRaf(time) {
         lenisInstance.raf(time);
@@ -212,7 +233,7 @@
       }
       requestAnimationFrame(lenisRaf);
     } else {
-      setTimeout(initLenisEngine, 150);
+      setTimeout(initLenisEngine, 80);
     }
   }
   initLenisEngine();
@@ -225,7 +246,7 @@
         const targetEl = document.querySelector(targetId);
         if (targetEl) {
           e.preventDefault();
-          if (lenisInstance) {
+          if (lenisInstance && typeof lenisInstance.scrollTo === 'function') {
             lenisInstance.scrollTo(targetEl, { duration: 1.4, offset: -40 });
           } else {
             targetEl.scrollIntoView({ behavior: 'smooth' });
@@ -239,7 +260,7 @@
   // 4A. HIGH-PERFORMANCE GLOBAL SEQUENCE CONTROLLER & PRIORITY QUEUE
   // ==========================================================================
   class GlobalSequenceLoader {
-    constructor(maxConcurrent = 2) {
+    constructor(maxConcurrent = 6) {
       this.maxConcurrent = maxConcurrent;
       this.activeCount = 0;
       this.queue = [];
@@ -304,8 +325,15 @@
     }
   }
 
-  const globalSequenceLoader = new GlobalSequenceLoader(2);
+  const globalSequenceLoader = new GlobalSequenceLoader(6);
   window.globalSequenceLoader = globalSequenceLoader;
+
+  // Immediately warm up Frame 0 for all 5 sequences so every section is instantly ready
+  globalSequenceLoader.load('fall/ezgif-frame-001.webp', 3000);
+  globalSequenceLoader.load('lift/ezgif-frame-001.webp', 2500);
+  globalSequenceLoader.load('build/ezgif-frame-001.webp', 2500);
+  globalSequenceLoader.load('hand/ezgif-frame-001.webp', 2500);
+  globalSequenceLoader.load('radio/ezgif-frame-001.webp', 2500);
 
   // ==========================================================================
   // 4B. FALL SCROLL-DOWN CANVAS SCRUBBER (191 FRAMES ACROSS SECTIONS 1 TO 3)
@@ -476,36 +504,35 @@
         if (Math.abs(diff) > 0.005) {
           currentFrameFloat += diff * 0.25;
           renderFallFrame();
+        } else if (currentFrameFloat !== targetFrameFloat) {
+          currentFrameFloat = targetFrameFloat;
+          renderFallFrame();
         }
       }
       requestAnimationFrame(fallAnimLoop);
     }
 
-    window.addEventListener('scroll', updateFallProgress, { passive: true });
-    if (lenisInstance) {
-      lenisInstance.on('scroll', updateFallProgress);
-    }
+    registerScrollUpdate(updateFallProgress);
 
     resizeFallCanvas();
     updateFallProgress();
     requestAnimationFrame(fallAnimLoop);
 
     // Load Frame 0 immediately
-    globalSequenceLoader.load(getFramePath(0), 2000).then((img) => {
+    globalSequenceLoader.load(getFramePath(0), 3000).then((img) => {
       if (img) renderFallFrame();
     });
 
     // Start background keyframe loading AFTER page load completes so the tab spinner stops instantly!
     const queueFallKeyframes = () => {
-      for (let i = 3; i < TOTAL_FRAMES; i += 3) {
-        globalSequenceLoader.load(getFramePath(i), 15);
+      for (let i = 6; i < TOTAL_FRAMES; i += 6) {
+        globalSequenceLoader.load(getFramePath(i), 10);
       }
     };
     if (document.readyState === 'complete') {
-      setTimeout(queueFallKeyframes, 100);
+      setTimeout(queueFallKeyframes, 400);
     } else {
-      window.addEventListener('load', queueFallKeyframes);
-      setTimeout(queueFallKeyframes, 2000);
+      window.addEventListener('load', () => setTimeout(queueFallKeyframes, 400));
     }
   }
 
@@ -596,11 +623,11 @@
     function triggerLiftActivation() {
       if (liftInitialized) return;
       liftInitialized = true;
-      globalSequenceLoader.load(getLiftFramePath(0), 1200).then(img => {
+      globalSequenceLoader.load(getLiftFramePath(0), 2000).then(img => {
         if (img) renderLiftFrame();
       });
-      for (let i = 3; i < TOTAL_LIFT_FRAMES; i += 3) {
-        globalSequenceLoader.load(getLiftFramePath(i), 12);
+      for (let i = 6; i < TOTAL_LIFT_FRAMES; i += 6) {
+        globalSequenceLoader.load(getLiftFramePath(i), 10);
       }
     }
 
@@ -660,17 +687,17 @@
       if (isLiftVisible) {
         const diff = liftTargetFrameFloat - liftCurrentFrameFloat;
         if (Math.abs(diff) > 0.005) {
-          liftCurrentFrameFloat += diff * 0.2;
+          liftCurrentFrameFloat += diff * 0.25;
+          renderLiftFrame();
+        } else if (liftCurrentFrameFloat !== liftTargetFrameFloat) {
+          liftCurrentFrameFloat = liftTargetFrameFloat;
           renderLiftFrame();
         }
       }
       requestAnimationFrame(liftAnimLoop);
     }
 
-    window.addEventListener('scroll', updateLiftProgress, { passive: true });
-    if (lenisInstance) {
-      lenisInstance.on('scroll', updateLiftProgress);
-    }
+    registerScrollUpdate(updateLiftProgress);
 
     resizeLiftCanvas();
     updateLiftProgress();
@@ -764,11 +791,11 @@
     function triggerBuildActivation() {
       if (buildInitialized) return;
       buildInitialized = true;
-      globalSequenceLoader.load(getBuildFramePath(0), 1200).then(img => {
+      globalSequenceLoader.load(getBuildFramePath(0), 2000).then(img => {
         if (img) renderBuildFrame();
       });
-      for (let i = 3; i < TOTAL_BUILD_FRAMES; i += 3) {
-        globalSequenceLoader.load(getBuildFramePath(i), 12);
+      for (let i = 6; i < TOTAL_BUILD_FRAMES; i += 6) {
+        globalSequenceLoader.load(getBuildFramePath(i), 10);
       }
     }
 
@@ -827,17 +854,17 @@
       if (isBuildVisible) {
         const diff = buildTargetFrameFloat - buildCurrentFrameFloat;
         if (Math.abs(diff) > 0.005) {
-          buildCurrentFrameFloat += diff * 0.2;
+          buildCurrentFrameFloat += diff * 0.25;
+          renderBuildFrame();
+        } else if (buildCurrentFrameFloat !== buildTargetFrameFloat) {
+          buildCurrentFrameFloat = buildTargetFrameFloat;
           renderBuildFrame();
         }
       }
       requestAnimationFrame(buildAnimLoop);
     }
 
-    window.addEventListener('scroll', updateBuildProgress, { passive: true });
-    if (lenisInstance) {
-      lenisInstance.on('scroll', updateBuildProgress);
-    }
+    registerScrollUpdate(updateBuildProgress);
 
     resizeBuildCanvas();
     updateBuildProgress();
@@ -931,11 +958,11 @@
     function triggerHandActivation() {
       if (handInitialized) return;
       handInitialized = true;
-      globalSequenceLoader.load(getHandFramePath(0), 1200).then(img => {
+      globalSequenceLoader.load(getHandFramePath(0), 2000).then(img => {
         if (img) renderHandFrame();
       });
-      for (let i = 3; i < TOTAL_HAND_FRAMES; i += 3) {
-        globalSequenceLoader.load(getHandFramePath(i), 12);
+      for (let i = 6; i < TOTAL_HAND_FRAMES; i += 6) {
+        globalSequenceLoader.load(getHandFramePath(i), 10);
       }
     }
 
@@ -994,17 +1021,17 @@
       if (isHandVisible) {
         const diff = handTargetFrameFloat - handCurrentFrameFloat;
         if (Math.abs(diff) > 0.005) {
-          handCurrentFrameFloat += diff * 0.2;
+          handCurrentFrameFloat += diff * 0.25;
+          renderHandFrame();
+        } else if (handCurrentFrameFloat !== handTargetFrameFloat) {
+          handCurrentFrameFloat = handTargetFrameFloat;
           renderHandFrame();
         }
       }
       requestAnimationFrame(handAnimLoop);
     }
 
-    window.addEventListener('scroll', updateHandProgress, { passive: true });
-    if (lenisInstance) {
-      lenisInstance.on('scroll', updateHandProgress);
-    }
+    registerScrollUpdate(updateHandProgress);
 
     resizeHandCanvas();
     updateHandProgress();
@@ -1098,11 +1125,11 @@
     function triggerRadioActivation() {
       if (radioInitialized) return;
       radioInitialized = true;
-      globalSequenceLoader.load(getRadioFramePath(0), 1200).then(img => {
+      globalSequenceLoader.load(getRadioFramePath(0), 2000).then(img => {
         if (img) renderRadioFrame();
       });
-      for (let i = 3; i < TOTAL_RADIO_FRAMES; i += 3) {
-        globalSequenceLoader.load(getRadioFramePath(i), 12);
+      for (let i = 6; i < TOTAL_RADIO_FRAMES; i += 6) {
+        globalSequenceLoader.load(getRadioFramePath(i), 10);
       }
     }
 
@@ -1150,17 +1177,17 @@
       if (isRadioVisible) {
         const diff = radioTargetFrameFloat - radioCurrentFrameFloat;
         if (Math.abs(diff) > 0.005) {
-          radioCurrentFrameFloat += diff * 0.2;
+          radioCurrentFrameFloat += diff * 0.25;
+          renderRadioFrame();
+        } else if (radioCurrentFrameFloat !== radioTargetFrameFloat) {
+          radioCurrentFrameFloat = radioTargetFrameFloat;
           renderRadioFrame();
         }
       }
       requestAnimationFrame(radioAnimLoop);
     }
 
-    window.addEventListener('scroll', updateRadioProgress, { passive: true });
-    if (lenisInstance) {
-      lenisInstance.on('scroll', updateRadioProgress);
-    }
+    registerScrollUpdate(updateRadioProgress);
 
     resizeRadioCanvas();
     updateRadioProgress();
@@ -1953,6 +1980,7 @@
   // ==========================================================================
   function initCaseStudiesStoryScroll() {
     if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') {
+      setTimeout(initCaseStudiesStoryScroll, 100);
       return;
     }
 
